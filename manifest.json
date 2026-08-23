@@ -1,0 +1,17 @@
+{
+  "name": "Stay in Your Lane — Poker",
+  "short_name": "Lane Poker",
+  "description": "Two original poker variants: Lane Hold'em with a forked seven-card board, and Convoy, a heads-up five-hand build. Play chips only.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0e1011",
+  "theme_color": "#0e1011",
+  "categories": ["games"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
