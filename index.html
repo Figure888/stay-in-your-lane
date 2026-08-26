@@ -411,9 +411,13 @@ button.act-btn:disabled{opacity:.28;cursor:not-allowed}
 
 <script src="age-gate.js"></script>
 <script src="chips-billing.js"></script>
+<script src="chip-store.js"></script>
 <script>
 SIYLGate.require();
-Chips.init();
+Chips.init().then(function(){ ChipStore.mount(); });
+window.addEventListener('chips:purchased', function(e){
+  console.log('bought', e.detail.chips);
+});
 </script>
 <script>
 "use strict";
