@@ -409,12 +409,6 @@ button.act-btn:disabled{opacity:.28;cursor:not-allowed}
   </div>
 </div>
 
-<script src="age-gate.js"></script>
-<script src="chips-billing.js"></script>
-<script>
-SIYLGate.require();
-Chips.init();
-</script>
 <script>
 "use strict";
 var RANK_CH=['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
