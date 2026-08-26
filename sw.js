@@ -1,6 +1,6 @@
 /* Stay in Your Lane — service worker
    Bump CACHE on every deploy or phones will keep serving the old build. */
-const CACHE = 'lane-poker-v1';
+const CACHE = 'lane-poker-v2';
 
 const SHELL = [
   './',
@@ -9,7 +9,11 @@ const SHELL = [
   './icon-192.png',
   './icon-512.png',
   './icon-maskable-512.png',
-  './apple-touch-icon.png'
+  './apple-touch-icon.png',
+  './age-gate.js',
+  './chips-billing.js',
+  './chip-store.js',
+  './privacy.html'
 ];
 
 self.addEventListener('install', e => {
