@@ -5,7 +5,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SUPABASE_URL = 'https://npprnzjptsqnjqvuvrvv.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5wcHJuempwdHNxbmpxdnV2cnZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3ODI5NDQsImV4cCI6MjEwMzM1ODk0NH0.Qi4s5JqQI76oBaqNLu56wnVWjmPfYUIvAgaYjZQFU58';
+const SUPABASE_ANON = 'sb_publishable_pbAu1TvLiBbFElFwVQJynw_zrSxe_I3';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 window.sb = sb;
