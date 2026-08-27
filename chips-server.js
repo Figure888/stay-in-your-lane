@@ -61,9 +61,9 @@ window.addEventListener('chips:purchased', () => Chips.syncBalance());
 
 // ---- chips tab ----
 const PACKS = [
-  { plan: 'plan_mr2XMRmxmcRo1', label: 'Rack',  chips: 10000,  price: '$1.99'  },
+  { plan: 'plan_4HDYux4xqROpb', label: 'Rack',  chips: 10000,  price: '$1.99'  },
   { plan: 'plan_vtLNPpoF6rn0N', label: 'Stack', chips: 60000,  price: '$9.99'  },
-  { plan: 'plan_4HDYux4xqROpb', label: 'Tray',  chips: 200000, price: '$29.99' },
+  { plan: 'plan_mr2XMRmxmcRo1', label: 'Tray',  chips: 200000, price: '$29.99' },
 ];
 
 window.renderPacks = function () {
