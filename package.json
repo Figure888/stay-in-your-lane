@@ -1,0 +1,7 @@
+{
+  "type": "module",
+  "dependencies": {
+    "@whop/api": "latest",
+    "@supabase/supabase-js": "^2"
+  }
+}

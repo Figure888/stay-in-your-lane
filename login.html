@@ -1,0 +1,44 @@
+<!doctype html>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign in — Stay in Your Lane</title>
+<style>
+ body{background:#0b3d2e;color:#f4efe4;font-family:system-ui;
+      display:grid;place-items:center;min-height:100vh;margin:0}
+ .card{width:min(360px,90vw);display:grid;gap:12px}
+ input,button{padding:14px;font-size:16px;border-radius:10px;border:0}
+ button{background:#d4af37;font-weight:600}
+ .ghost{background:transparent;color:#d4af37}
+ #msg{min-height:1.2em;font-size:14px;color:#ffb4a2}
+</style>
+<div class="card">
+  <h1>Stay in Your Lane</h1>
+  <input id="email" type="email" placeholder="email" autocomplete="email">
+  <input id="pw" type="password" placeholder="password" autocomplete="current-password">
+  <button id="signin">Sign in</button>
+  <button id="signup" class="ghost">Create account</button>
+  <div id="msg"></div>
+</div>
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const sb = createClient(
+  'https://npprnzjptsqnjqvuvrvv.supabase.co',
+  'PASTE_YOUR_ANON_KEY_HERE'
+);
+const msg = document.getElementById('msg');
+const creds = () => ({
+  email: document.getElementById('email').value.trim(),
+  password: document.getElementById('pw').value,
+});
+document.getElementById('signin').onclick = async () => {
+  const { error } = await sb.auth.signInWithPassword(creds());
+  msg.textContent = error ? error.message : '';
+  if (!error) location.href = './index.html';
+};
+document.getElementById('signup').onclick = async () => {
+  const { error } = await sb.auth.signUp(creds());
+  msg.textContent = error ? error.message : 'Check your email to confirm.';
+};
+sb.auth.getSession().then(({ data }) => {
+  if (data.session) location.href = './index.html';
+});
+</script>
