@@ -508,7 +508,7 @@ var BOTS=[{name:'Vega',aggr:.62,loose:.50,bluff:.16,col:'#e0663f'},
           {name:'Cutler',aggr:.34,loose:.30,bluff:.05,col:'#6fb3d2'},
           {name:'Rook',aggr:.80,loose:.66,bluff:.28,col:'#8fce7a'}];
 var STAGES=['On-ramp','The Merge','The Fork','The Exit','Showdown'];
-var P=[],deck=[],laneA=[],laneB=[],mid=[],pot=0,curBet=0,minRaise=BB,dealer=0,stageIdx=0,acting=-1,toAct={},raises=0,handOver=true,revealAll=false,seen={};
+var LP=[],deck=[],laneA=[],laneB=[],mid=[],pot=0,curBet=0,minRaise=BB,dealer=0,stageIdx=0,acting=-1,toAct={},raises=0,handOver=true,revealAll=false,seen={};
 
 function $(id){return document.getElementById(id);}
 function fmt(n){return n.toLocaleString('en-US');}
@@ -516,30 +516,30 @@ function setToAct(list){toAct={};list.forEach(function(i){toAct[i]=1;});}
 function toActCount(){return Object.keys(toAct).length;}
 
 function newTable(){
-  P=[{name:'You',human:true,chips:START,col:'#ffd54a'}];
-  BOTS.forEach(function(b){P.push({name:b.name,aggr:b.aggr,loose:b.loose,bluff:b.bluff,col:b.col,human:false,chips:START});});
-  P.forEach(function(p){p.hole=[];p.bet=0;p.total=0;p.folded=true;p.allIn=false;p.act='';p.win=false;});
+  LP=[{name:'You',human:true,chips:START,col:'#ffd54a'}];
+  BOTS.forEach(function(b){LP.push({name:b.name,aggr:b.aggr,loose:b.loose,bluff:b.bluff,col:b.col,human:false,chips:START});});
+  LP.forEach(function(p){p.hole=[];p.bet=0;p.total=0;p.folded=true;p.allIn=false;p.act='';p.win=false;});
   dealer=Math.floor(Math.random()*4);
   handOver=true;revealAll=false;laneA=[];laneB=[];mid=[];pot=0;stageIdx=0;seen={};
   renderAll();
 }
-function nextLive(i){var k=i;for(var n=0;n<4;n++){k=(k+1)%4;if(P[k].chips>0&&!P[k].folded)return k;}return i;}
-function nextToAct(i){var k=(i<0?dealer:i);for(var n=0;n<4;n++){k=(k+1)%4;if(!P[k].folded&&!P[k].allIn)return k;}return -1;}
-function put(i,amt){amt=Math.max(0,Math.min(amt,P[i].chips));P[i].chips-=amt;P[i].bet+=amt;P[i].total+=amt;pot+=amt;if(P[i].chips===0&&P[i].total>0)P[i].allIn=true;}
-function liveIdx(){return P.map(function(p,i){return i;}).filter(function(i){return !P[i].folded;});}
+function nextLive(i){var k=i;for(var n=0;n<4;n++){k=(k+1)%4;if(LP[k].chips>0&&!LP[k].folded)return k;}return i;}
+function nextToAct(i){var k=(i<0?dealer:i);for(var n=0;n<4;n++){k=(k+1)%4;if(!LP[k].folded&&!LP[k].allIn)return k;}return -1;}
+function put(i,amt){amt=Math.max(0,Math.min(amt,LP[i].chips));LP[i].chips-=amt;LP[i].bet+=amt;LP[i].total+=amt;pot+=amt;if(LP[i].chips===0&&LP[i].total>0)LP[i].allIn=true;}
+function liveIdx(){return LP.map(function(p,i){return i;}).filter(function(i){return !LP[i].folded;});}
 
 function newHand(){
-  if(P.filter(function(p){return p.chips>0;}).length<2){newTable();msg('Fresh stacks all round.');renderAll();return;}
+  if(LP.filter(function(p){return p.chips>0;}).length<2){newTable();msg('Fresh stacks all round.');renderAll();return;}
   deck=shuffle(makeDeck());
   laneA=[];laneB=[];mid=[];pot=0;curBet=0;minRaise=BB;stageIdx=0;raises=0;handOver=false;revealAll=false;seen={};
-  P.forEach(function(p){p.hole=[];p.bet=0;p.total=0;p.folded=p.chips<=0;p.allIn=false;p.act='';p.win=false;});
-  do{dealer=(dealer+1)%4;}while(P[dealer].chips<=0);
-  P.forEach(function(p){if(!p.folded)p.hole=[deck.pop(),deck.pop()];});
+  LP.forEach(function(p){p.hole=[];p.bet=0;p.total=0;p.folded=p.chips<=0;p.allIn=false;p.act='';p.win=false;});
+  do{dealer=(dealer+1)%4;}while(LP[dealer].chips<=0);
+  LP.forEach(function(p){if(!p.folded)p.hole=[deck.pop(),deck.pop()];});
   var sbI=nextLive(dealer),bbI=nextLive(sbI);
-  put(sbI,Math.min(SB,P[sbI].chips));P[sbI].act='SB';
-  put(bbI,Math.min(BB,P[bbI].chips));P[bbI].act='BB';
+  put(sbI,Math.min(SB,LP[sbI].chips));LP[sbI].act='SB';
+  put(bbI,Math.min(BB,LP[bbI].chips));LP[bbI].act='BB';
   curBet=BB;
-  setToAct(P.map(function(p,i){return i;}).filter(function(i){return !P[i].folded&&!P[i].allIn;}));
+  setToAct(LP.map(function(p,i){return i;}).filter(function(i){return !LP[i].folded&&!LP[i].allIn;}));
   acting=nextToAct(bbI);
   msg('Blinds are up. On-ramp.');
   renderAll();
@@ -548,20 +548,20 @@ function newHand(){
 function step(){
   if(handOver)return;
   if(liveIdx().length===1)return finish();
-  var canAct=P.filter(function(p){return !p.folded&&!p.allIn;}).length;
+  var canAct=LP.filter(function(p){return !p.folded&&!p.allIn;}).length;
   if(toActCount()===0||canAct===0)return advance();
-  if(acting<0||P[acting].folded||P[acting].allIn||!toAct[acting]){
+  if(acting<0||LP[acting].folded||LP[acting].allIn||!toAct[acting]){
     var keys=Object.keys(toAct).map(Number);
     var k=nextToAct(acting);
     acting=(k>=0&&toAct[k])?k:keys[0];
     if(acting===undefined)return advance();
   }
   renderAll();
-  if(P[acting].human){enableControls(true);}
+  if(LP[acting].human){enableControls(true);}
   else{enableControls(false);var who=acting;setTimeout(function(){if(!handOver&&acting===who)aiMove(who);},600+Math.random()*500);}
 }
 function commitAction(i,type,amount){
-  var p=P[i];
+  var p=LP[i];
   if(type==='fold'){p.folded=true;p.act='Fold';}
   else if(type==='call'){
     var need=Math.min(curBet-p.bet,p.chips);
@@ -575,7 +575,7 @@ function commitAction(i,type,amount){
     minRaise=Math.max(minRaise,target-curBet);
     curBet=target;raises++;
     p.act=(p.allIn?'All in ':(wasBet?'Bet ':'Raise to '))+fmt(target);
-    P.forEach(function(q,j){if(j!==i&&!q.folded&&!q.allIn)toAct[j]=1;});
+    LP.forEach(function(q,j){if(j!==i&&!q.folded&&!q.allIn)toAct[j]=1;});
   }
   delete toAct[i];
   acting=nextToAct(i);
@@ -583,15 +583,15 @@ function commitAction(i,type,amount){
   setTimeout(step,240);
 }
 function advance(){
-  P.forEach(function(p){p.bet=0;p.act=p.folded?'Fold':'';});
+  LP.forEach(function(p){p.bet=0;p.act=p.folded?'Fold':'';});
   curBet=0;minRaise=BB;raises=0;
   stageIdx++;
   if(stageIdx===1){mid=[deck.pop(),deck.pop(),deck.pop()];}
   else if(stageIdx===2){laneA.push(deck.pop());laneB.push(deck.pop());}
   else if(stageIdx===3){laneA.push(deck.pop());laneB.push(deck.pop());}
   else return finish();
-  var canAct=P.filter(function(p){return !p.folded&&!p.allIn;}).length;
-  setToAct(canAct<2?[]:P.map(function(p,i){return i;}).filter(function(i){return !P[i].folded&&!P[i].allIn;}));
+  var canAct=LP.filter(function(p){return !p.folded&&!p.allIn;}).length;
+  setToAct(canAct<2?[]:LP.map(function(p,i){return i;}).filter(function(i){return !LP[i].folded&&!LP[i].allIn;}));
   acting=nextToAct(dealer);
   msg(STAGES[stageIdx]+'.');
   renderAll();
@@ -606,27 +606,27 @@ function finish(){
     stageIdx=4;
   }
   var results={};
-  live.forEach(function(i){results[i]=(mid.length===3)?bestLine(P[i].hole,laneA,laneB,mid):{v:0,lane:'\u2014'};});
-  var totals=P.map(function(p){return p.total;}).filter(function(t){return t>0;});
+  live.forEach(function(i){results[i]=(mid.length===3)?bestLine(LP[i].hole,laneA,laneB,mid):{v:0,lane:'\u2014'};});
+  var totals=LP.map(function(p){return p.total;}).filter(function(t){return t>0;});
   var levels=totals.filter(function(v,i){return totals.indexOf(v)===i;}).sort(function(a,b){return a-b;});
   var prev=0,last=null;
   levels.forEach(function(lvl){
     var amt=0;
-    P.forEach(function(p){amt+=Math.max(0,Math.min(p.total,lvl)-Math.min(p.total,prev));});
-    var elig=live.filter(function(i){return P[i].total>=lvl;});
+    LP.forEach(function(p){amt+=Math.max(0,Math.min(p.total,lvl)-Math.min(p.total,prev));});
+    var elig=live.filter(function(i){return LP[i].total>=lvl;});
     prev=lvl;
     if(amt<=0||elig.length===0)return;
     var bv=-1,winners=[];
     elig.forEach(function(i){var v=results[i].v;if(v>bv){bv=v;winners=[i];}else if(v===bv)winners.push(i);});
     var share=Math.floor(amt/winners.length),rem=amt-share*winners.length;
-    winners.forEach(function(w,k){P[w].chips+=share+(k<rem?1:0);P[w].win=true;});
+    winners.forEach(function(w,k){LP[w].chips+=share+(k<rem?1:0);LP[w].win=true;});
     last={winners:winners,amt:amt};
   });
   pot=0;
   if(live.length===1){
-    msg(P[live[0]].name+(P[live[0]].human?' take it':' takes it')+' \u2014 everyone else folded.',true);
+    msg(LP[live[0]].name+(LP[live[0]].human?' take it':' takes it')+' \u2014 everyone else folded.',true);
   }else if(last){
-    var nms=last.winners.map(function(i){return P[i].name;}).join(' & ');
+    var nms=last.winners.map(function(i){return LP[i].name;}).join(' & ');
     var r=results[last.winners[0]];
     msg(nms+' \u2014 '+nameOf(r.v)+' down Lane '+r.lane+'.',true);
     revealAll=true;
@@ -652,14 +652,14 @@ function preflopScore(h){
   return Math.max(0.05,Math.min(0.97,s));
 }
 function strength(i){
-  var p=P[i];
+  var p=LP[i];
   if(stageIdx===0||mid.length<3)return preflopScore(p.hole);
   var b=bestLine(p.hole,laneA,laneB,mid);
   var base=[.16,.34,.53,.68,.79,.86,.93,.98,1][catOf(b.v)];
   return Math.min(0.995,base+((b.v%371293)/371293)*0.05);
 }
 function aiMove(i){
-  var p=P[i];
+  var p=LP[i];
   var need=Math.min(curBet-p.bet,p.chips);
   var odds=need>0?need/(pot+need):0;
   var s=strength(i)+(Math.random()-0.5)*0.10+(p.aggr-0.5)*0.06;
@@ -712,7 +712,7 @@ function seatMarkup(p,i){
 function renderSeats(){
   var el=$('seats');el.innerHTML='';
   [1,2,3].forEach(function(i){
-    var p=P[i];if(!p)return;
+    var p=LP[i];if(!p)return;
     var d=document.createElement('div');
     d.className='seat'+(acting===i?' acting':'')+((p.folded||p.chips<=0)?' out':'')+(p.win?' winner':'');
     d.innerHTML=seatMarkup(p,i);
@@ -745,8 +745,8 @@ function fillGroup(el,arr,n,key,winCards){
 }
 function renderBoard(){
   var winCards=null;
-  if(handOver&&revealAll&&P[0].hole.length&&!P[0].folded&&mid.length===3){
-    winCards=bestLine(P[0].hole,laneA,laneB,mid).cards;
+  if(handOver&&revealAll&&LP[0].hole.length&&!LP[0].folded&&mid.length===3){
+    winCards=bestLine(LP[0].hole,laneA,laneB,mid).cards;
   }
   fillGroup($('middle'),mid,3,'M',winCards);
   fillGroup($('laneA'),laneA,2,'A',winCards);
@@ -756,7 +756,7 @@ function renderBoard(){
   var pc=$('potChips');pc.innerHTML='';pc.appendChild(chipStack(pot));
 }
 function renderHero(){
-  var p=P[0];
+  var p=LP[0];
   $('heroStack').textContent=fmt(p.chips);
   $('heroDealer').innerHTML=dealer===0?'<span class="dealer-chip">D</span>':'';
   $('heroAct').innerHTML=p.act||'&nbsp;';
@@ -780,7 +780,7 @@ function renderAll(){renderSeats();renderBoard();renderHero();}
 function msg(t,win){var m=$('msg');m.textContent=t;m.className='msg'+(win?' win':'');}
 
 function enableControls(on){
-  var p=P[0];
+  var p=LP[0];
   var need=Math.max(0,curBet-p.bet);
   $('btnFold').disabled=!on;
   $('btnCall').disabled=!(on||handOver);
@@ -804,7 +804,7 @@ $('btnRaise').onclick=function(){$('raisePanel').classList.toggle('on');};
 $('raiseSlider').oninput=function(e){$('raiseAmt').textContent=fmt(+e.target.value);};
 Array.prototype.forEach.call(document.querySelectorAll('.chipbtn[data-frac]'),function(b){
   b.onclick=function(){
-    var p=P[0],f=parseFloat(b.dataset.frac),sl=$('raiseSlider');
+    var p=LP[0],f=parseFloat(b.dataset.frac),sl=$('raiseSlider');
     var need=curBet-p.bet;
     var t=f>=9?p.chips+p.bet:Math.round((curBet+(pot+need)*f)/10)*10;
     t=Math.max(+sl.min,Math.min(+sl.max,t));
