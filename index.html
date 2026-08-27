@@ -414,7 +414,7 @@ button.act-btn:disabled{opacity:.28;cursor:not-allowed}
 <script src="chip-store.js"></script>
 <script>
 SIYLGate.require();
-Chips.init().then(function(){ ChipStore.mount(); });
+Promise.resolve(Chips.init()).then(function(ok){ if (ok) ChipStore.mount(); }).catch(function(e){ console.warn('billing unavailable', e); });
 window.addEventListener('chips:purchased', function(e){
   console.log('bought', e.detail.chips);
 });
