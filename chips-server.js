@@ -58,53 +58,38 @@ await Chips.syncBalance();
 await Chips.tryRefill();
 window.addEventListener('chips:purchased', () => Chips.syncBalance());
 
-// ---- web store (only when Play Billing isn't available) ----
-if (!('getDigitalGoodsService' in window)) {
-  const PACKS = [
-    { plan: 'plan_mr2XMRmxmcRo1', label: 'Rack',  chips: 10000,  price: '$1.99'  },
-    { plan: 'plan_vtLNPpoF6rn0N', label: 'Stack', chips: 60000,  price: '$9.99'  },
-    { plan: 'plan_4HDYux4xqROpb', label: 'Tray',  chips: 200000, price: '$29.99' },
-  ];
 
-  const wrap = document.createElement('div');
-  wrap.id = 'web-store';
-  wrap.style.cssText =
-    'position:fixed;inset:0;z-index:2147482000;background:#0b3d2ef2;' +
-    'display:none;overflow:auto;padding:24px;color:#f4efe4;font-family:system-ui';
+// ---- chips tab ----
+const PACKS = [
+  { plan: 'plan_mr2XMRmxmcRo1', label: 'Rack',  chips: 10000,  price: '$1.99'  },
+  { plan: 'plan_vtLNPpoF6rn0N', label: 'Stack', chips: 60000,  price: '$9.99'  },
+  { plan: 'plan_4HDYux4xqROpb', label: 'Tray',  chips: 200000, price: '$29.99' },
+];
 
-  wrap.innerHTML =
-    '<button id="ws-close" style="float:right;font-size:24px;background:none;' +
-    'border:0;color:#d4af37">&times;</button><h2>Buy chips</h2>' +
-    PACKS.map(p =>
-      `<div style="margin:18px 0;padding:14px;border:1px solid #d4af3755;border-radius:12px">
-         <h3 style="margin:0 0 4px">${p.label} — ${p.chips.toLocaleString()} chips</h3>
-         <p style="margin:0 0 10px;opacity:.8">${p.price}</p>
-         <div data-whop-checkout-plan-id="${p.plan}"
-              data-whop-checkout-theme="dark"
-              data-whop-checkout-metadata='${JSON.stringify({ user_id: session.user.id })}'></div>
-       </div>`).join('') +
-    '<p style="font-size:13px;opacity:.7;margin-top:24px">Chips have no real-world ' +
-    'value and cannot be redeemed, withdrawn, or exchanged for cash or prizes. ' +
-    'All purchases are final.</p>';
+window.renderPacks = function () {
+  const bal = document.getElementById('storeBalance');
+  if (bal) bal.textContent = cached.toLocaleString();
 
-  document.body.appendChild(wrap);
-  wrap.querySelector('#ws-close').onclick = () => wrap.style.display = 'none';
+  const list = document.getElementById('packList');
+  if (!list || list.dataset.built) return;
+  list.dataset.built = '1';
 
-  const btn = document.createElement('button');
-  btn.textContent = '+ Chips';
-  btn.style.cssText =
-    'position:fixed;right:14px;bottom:14px;z-index:2147481999;padding:12px 18px;' +
-    'border:0;border-radius:24px;background:#d4af37;font-weight:600;font-size:16px';
-  btn.onclick = () => wrap.style.display = 'block';
-  document.body.appendChild(btn);
+  list.innerHTML = PACKS.map(p => `
+    <div class="cv-block" style="margin-top:10px">
+      <div class="cv-head" style="margin-bottom:6px">
+        <div>
+          <div class="nm">${p.label}</div>
+          <div class="stack">${p.chips.toLocaleString()} chips</div>
+        </div>
+        <div class="cv-bank">${p.price}</div>
+      </div>
+      <div data-whop-checkout-plan-id="${p.plan}"
+           data-whop-checkout-theme="dark"
+           data-whop-checkout-metadata='${JSON.stringify({ user_id: session.user.id })}'></div>
+    </div>`).join('');
+};
 
-  window.openWebStore = () => wrap.style.display = 'block';
-}
-
-// re-enable controls once the real balance lands
 window.addEventListener('chips:changed', () => {
-  ['btnDeal','btnFold','btnRaise'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el && cached > 0) el.disabled = false;
-  });
+  const bal = document.getElementById('storeBalance');
+  if (bal) bal.textContent = cached.toLocaleString();
 });

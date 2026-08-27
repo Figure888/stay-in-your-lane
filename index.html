@@ -247,6 +247,7 @@ button.act-btn:disabled{opacity:.28;cursor:not-allowed}
   <div class="mode-row">
     <button class="mode-btn on" id="modeTable">Lane Hold'em</button>
     <button class="mode-btn" id="modeConvoy">Convoy &middot; 1v1</button>
+    <button class="mode-btn" id="modeStore">Chips</button>
   </div>
 
   <div id="tableView">
@@ -356,6 +357,29 @@ button.act-btn:disabled{opacity:.28;cursor:not-allowed}
     <div class="msg" id="cvMsg" style="margin-top:9px">Pick a stake and deal.</div>
 
     <div class="cv-block" id="cvYou"></div>
+    <div style="height:16px"></div>
+  </div>
+
+  <div id="storeView" style="display:none">
+    <div class="cv-block" style="margin-top:12px">
+      <div class="cv-head">
+        <div>
+          <div class="stage" style="font-size:14px">Chip packs</div>
+          <div class="sub" style="margin-top:3px">Top up your stack</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:var(--mono);font-size:8.5px;letter-spacing:.17em;color:var(--muted);text-transform:uppercase">Balance</div>
+          <div class="cv-bank" id="storeBalance">&mdash;</div>
+        </div>
+      </div>
+    </div>
+    <div id="packList"></div>
+    <div class="cv-block" style="margin-top:10px">
+      <div style="font-family:var(--mono);font-size:10px;line-height:1.6;color:var(--muted)">
+        Chips have no real-world value and cannot be redeemed, withdrawn, or
+        exchanged for cash or prizes. All purchases are final.
+      </div>
+    </div>
     <div style="height:16px"></div>
   </div>
 
@@ -1145,15 +1169,18 @@ Array.prototype.forEach.call($('cvStakes').children,function(b){
   b.onclick=function(){if(CV.live&&!CV.over)return;CV.stake=+b.dataset.stake;cvRender();};
 });
 function setMode(m){
-  var t=(m==='table');
-  $('tableView').style.display=t?'':'none';
-  $('convoyView').style.display=t?'none':'';
-  $('modeTable').className='mode-btn'+(t?' on':'');
-  $('modeConvoy').className='mode-btn'+(t?'':' on');
-  if(!t)cvRender();
+  $('tableView').style.display=(m==='table')?'':'none';
+  $('convoyView').style.display=(m==='convoy')?'':'none';
+  $('storeView').style.display=(m==='store')?'':'none';
+  $('modeTable').className='mode-btn'+(m==='table'?' on':'');
+  $('modeConvoy').className='mode-btn'+(m==='convoy'?' on':'');
+  $('modeStore').className='mode-btn'+(m==='store'?' on':'');
+  if(m==='convoy')cvRender();
+  if(m==='store'&&window.renderPacks)window.renderPacks();
 }
 $('modeTable').onclick=function(){setMode('table');};
 $('modeConvoy').onclick=function(){setMode('convoy');};
+$('modeStore').onclick=function(){setMode('store');};
 
 newTable();cvRender();
 $('btnFold').disabled=true;$('btnRaise').disabled=true;$('btnCall').disabled=false;$('btnCall').textContent='Deal';
@@ -1168,6 +1195,7 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
+<script type="module" src="chips-server.js"></script>
 </body>
 </html>
 <script async src="https://js.whop.com/static/checkout/loader.js"></script>
