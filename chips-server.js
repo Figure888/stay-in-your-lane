@@ -100,3 +100,11 @@ if (!('getDigitalGoodsService' in window)) {
 
   window.openWebStore = () => wrap.style.display = 'block';
 }
+
+// re-enable controls once the real balance lands
+window.addEventListener('chips:changed', () => {
+  ['btnDeal','btnFold','btnRaise'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && cached > 0) el.disabled = false;
+  });
+});
