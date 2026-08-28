@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 250" width="600" height="500" role="img" aria-labelledby="title desc">
+<title id="title">Lane Poker</title>
+<desc id="desc">Green felt badge with gold border, five playing cards above a road lane, wordmark Lane Poker and tagline stay in your lane.</desc>
+<defs>
+<clipPath id="badgeClip"><rect x="8" y="8" width="284" height="234" rx="14"/></clipPath>
+</defs>
+<rect x="1.5" y="0" width="297" height="250" rx="18" fill="#0f3d2e" stroke="#d4a017" stroke-width="3"/>
+<rect x="8" y="8" width="284" height="234" rx="14" fill="none" stroke="#d4a017" stroke-width="0.8" opacity="0.65"/>
+<g clip-path="url(#badgeClip)">
+<rect x="0" y="130" width="300" height="42" fill="#26262b"/>
+<line x1="12" y1="151" x2="288" y2="151" stroke="#f0e6c8" stroke-width="3.5" stroke-dasharray="16 14"/>
+<g transform="rotate(-15 48 100)">
+<rect x="28" y="72" width="40" height="56" rx="5" fill="#f7f3e8" stroke="#cfc8b4" stroke-width="0.8"/>
+<path transform="translate(37.8,89.8) scale(0.6)" d="M17 4 C10 12 6 16 6 21 C6 25 11 26 15 22 C14 26 13 28 11 30 L23 30 C21 28 20 26 19 22 C23 26 28 25 28 21 C28 16 24 12 17 4 Z" fill="#1a1a1a"/>
+</g>
+<g transform="rotate(-7 80 96)">
+<rect x="60" y="68" width="40" height="56" rx="5" fill="#f7f3e8" stroke="#cfc8b4" stroke-width="0.8"/>
+<g transform="translate(69.8,85.8) scale(0.6)" fill="#1a1a1a">
+<circle cx="17" cy="12" r="6.5"/><circle cx="10" cy="21" r="6.5"/><circle cx="24" cy="21" r="6.5"/>
+<path d="M15 24 C15 28 14 30 12 31 L22 31 C20 30 19 28 19 24 Z"/>
+</g>
+</g>
+<g transform="rotate(7 220 96)">
+<rect x="200" y="68" width="40" height="56" rx="5" fill="#f7f3e8" stroke="#cfc8b4" stroke-width="0.8"/>
+<path transform="translate(209.8,85.8) scale(0.6)" d="M17 30 C6 21 5 14 10 11 C14 9 17 12 17 15 C17 12 20 9 24 11 C29 14 28 21 17 30 Z" fill="#b3202c"/>
+</g>
+<g transform="rotate(15 252 100)">
+<rect x="232" y="72" width="40" height="56" rx="5" fill="#f7f3e8" stroke="#cfc8b4" stroke-width="0.8"/>
+<path transform="translate(241.8,89.8) scale(0.6)" d="M17 4 C10 12 6 16 6 21 C6 25 11 26 15 22 C14 26 13 28 11 30 L23 30 C21 28 20 26 19 22 C23 26 28 25 28 21 C28 16 24 12 17 4 Z" fill="#1a1a1a"/>
+</g>
+<rect x="85" y="58" width="40" height="56" rx="5" fill="#f7f3e8" stroke="#cfc8b4" stroke-width="0.8"/>
+<path transform="translate(94.8,75.8) scale(0.6)" d="M17 4 C10 12 6 16 6 21 C6 25 11 26 15 22 C14 26 13 28 11 30 L23 30 C21 28 20 26 19 22 C23 26 28 25 28 21 C28 16 24 12 17 4 Z" fill="#1a1a1a"/>
+<rect x="130" y="58" width="40" height="56" rx="5" fill="#f7f3e8" stroke="#cfc8b4" stroke-width="0.8"/>
+<path transform="translate(139.8,75.8) scale(0.6)" d="M17 30 C6 21 5 14 10 11 C14 9 17 12 17 15 C17 12 20 9 24 11 C29 14 28 21 17 30 Z" fill="#b3202c"/>
+<rect x="175" y="58" width="40" height="56" rx="5" fill="#f7f3e8" stroke="#cfc8b4" stroke-width="0.8"/>
+<path transform="translate(184.8,75.8) scale(0.6)" d="M17 4 L28 17 L17 30 L6 17 Z" fill="#b3202c"/>
+</g>
+<text x="150" y="208" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="30" font-weight="500" letter-spacing="0.5" fill="#f5efdc">Lane Poker</text>
+<text x="150" y="230" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" letter-spacing="3" fill="#d4a017">stay in your lane</text>
+</svg>
