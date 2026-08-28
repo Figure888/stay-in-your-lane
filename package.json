@@ -1,7 +1,11 @@
 {
   "type": "module",
   "dependencies": {
+    "@supabase/supabase-js": "^2",
     "@whop/api": "latest",
-    "@supabase/supabase-js": "^2"
+    "pg": "^8.23.0"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }
