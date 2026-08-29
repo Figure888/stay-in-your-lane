@@ -1,235 +1,340 @@
 /*
  * Stay in Your Lane — Convoy online
  * ----------------------------------
- * Drop-in, same shape as age-gate.js and chip-store.js. Vanilla JS, no build
- * step. Reuses the existing .cv-* and .card.cv styles so it inherits the look
- * of the offline mode.
+ * Drop-in. Requires chips-server.js (window.sb) and must load AFTER the
+ * inline game script in index.html, because it borrows that renderer.
  *
- * Requires chips-server.js loaded first (it creates window.sb).
+ * The important design choice: online mode does NOT have its own board. It
+ * builds a CV-shaped object from server state and calls your existing
+ * cvRender(), so the two modes are identical by construction rather than by
+ * imitation — empty slots, 1/5 counters, SWAP OPEN, pips, result colouring,
+ * card markup, all of it. Style the offline board and the online one follows.
  *
- *   <script src="convoy-online.js"></script>
- *
- * Renders into #convoyOnline if present, otherwise appends to body.
- * Call ConvoyOnline.mount() to show the lobby.
- *
- * State comes from the server on a 2-second poll. Realtime would be nicer,
- * but the convoy tables have RLS on with no policies — deliberately, so the
- * pile order and the opponent's hand are unreachable from a browser — and a
- * Realtime subscription would need those opened up. Polling keeps the
- * security model intact. Swap it later if the traffic justifies it.
+ * The four action handlers are wrapped rather than edited: top-level function
+ * declarations live on window, so reassigning them redirects the clicks
+ * cvBlock already wired up. Nothing in index.html's logic needs changing.
  */
 (function () {
   'use strict';
 
-  var RANK = ['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
-  var SUIT = ['\u2660','\u2665','\u2666','\u2663'];
   var STAKES = [100, 250, 500];
   var POLL_MS = 2000;
 
-  var mount = null, timer = null, state = null, gameId = null, busy = false;
-  var tick = null, deadline = null, lastSeenAction = null;
+  var online = false, gameId = null, state = null, busy = false;
+  var timer = null, tick = null, deadline = null;
+  var offlineCV = null;          // stashed while online, restored on exit
+  var orig = {};                 // the handlers we wrap
 
-  // ---------------------------------------------------------------- helpers
+  function $(id) { return document.getElementById(id); }
+  function card(c) { return { r: c >> 2, s: c & 3 }; }
 
-  function el() {
-    if (mount && document.body.contains(mount)) return mount;
-    mount = document.getElementById('convoyOnline');
-    if (!mount) {
-      mount = document.createElement('div');
-      mount.id = 'convoyOnline';
-      document.body.appendChild(mount);
-    }
-    return mount;
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch];
+    });
   }
 
+  // ------------------------------------------------------------------- api
+
   async function token() {
-    if (!window.sb) throw new Error('chips-server.js must load first');
     var s = await window.sb.auth.getSession();
-    if (!s.data.session) throw new Error('not signed in');
+    if (!s.data.session) throw new Error('not_signed_in');
     return s.data.session.access_token;
   }
 
   async function api(path, opts) {
     opts = opts || {};
-    var t = await token();
     var res = await fetch(path, {
       method: opts.method || 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + t,
-      },
+      headers: { 'Content-Type': 'application/json',
+                 Authorization: 'Bearer ' + (await token()) },
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
     var data = await res.json().catch(function () { return {}; });
-    if (!res.ok) throw new Error(data.error || data.message || ('HTTP ' + res.status));
+    if (!res.ok) throw new Error(data.error || data.message || 'HTTP ' + res.status);
     return data;
   }
 
-  function cardHTML(c, extra) {
-    if (c === null || c === undefined) {
-      return '<div class="card cv back' + (extra ? ' ' + extra : '') + '"></div>';
+  function friendly(code) {
+    return ({
+      insufficient_chips: 'Not enough chips for that stake.',
+      no_profile: 'Your account isn\u2019t set up yet.',
+      not_signed_in: 'Sign in to play online.',
+      already_in_game: 'You\u2019re already at a table.',
+      cannot_join_own_table: 'That\u2019s your own invite.',
+      invite_already_used: 'Someone else took that seat.',
+      invite_expired: 'That invite has expired.',
+      unknown_code: 'No table with that code.',
+      host_short_on_chips: 'The host is short on chips.',
+      not_your_turn: 'Not your turn.',
+      rate_limited: 'Slow down a moment.',
+    })[code] || code;
+  }
+
+  // ------------------------------------------------- server state -> CV
+
+  /* cvBlock reads p.held for the opponent and renders backs when the game is
+     live, so the array only needs the right length — never real cards. */
+  function hiddenHand(n) {
+    var out = [];
+    for (var i = 0; i < n; i++) out.push({ r: 0, s: 0 });
+    return out;
+  }
+
+  function toCV(s) {
+    var mine = (s.lanes || []).map(function (l) { return l.map(card); });
+    var theirs = (s.oppLanes || []).map(function (l) { return l.map(card); });
+    while (mine.length < 4) mine.push([]);
+    while (theirs.length < 4) theirs.push([]);
+
+    var over = s.phase === 'done';
+    var myHeld = (s.held || []).map(card);
+    var oppHeld = over && s.oppHeld ? s.oppHeld.map(card) : hiddenHand(s.oppHeldCount || 5);
+
+    var cv = {
+      P: [
+        { name: 'You', lanes: mine, held: myHeld, disc: !s.canSwap },
+        { name: s.oppName || 'Opponent', lanes: theirs, held: oppHeld, disc: false },
+      ],
+      bank: 0,                      // filled from the account balance
+      pot: s.pot || 0,
+      stake: s.stake || STAKES[0],
+      paid: [s.stake || 0, s.stake || 0],
+      turn: s.yourTurn ? 0 : 1,
+      drawn: (s.drawn === null || s.drawn === undefined) ? null : card(s.drawn),
+      deck: { length: s.pileLeft || 0 },
+      live: !over,
+      over: over,
+      swapping: false,
+      result: null,
+      bet: null,
+      betDone: false,
+      foldedBy: -1,
+    };
+
+    if (s.phase === 'checkpoint' && s.betting) {
+      var owe = s.betting.youOwe || 0;
+      cv.bet = {
+        turn: s.yourTurn ? 0 : 1,
+        committed: [0, owe],        // cvRender only reads the difference
+        raises: s.betting.raises || 0,
+        acted: [false, false],
+      };
     }
-    var r = RANK[c >> 2], s = SUIT[c & 3];
-    var red = (c & 3) === 1 || (c & 3) === 2;
-    return '<div class="card cv' + (red ? ' red' : '') + (extra ? ' ' + extra : '') + '">' +
-             '<div class="ix tl"><b>' + r + '</b><i>' + s + '</i></div>' +
-             '<div class="ix br"><b>' + r + '</b><i>' + s + '</i></div>' +
-           '</div>';
+
+    // Scores come back in the server's encoding, which catOf() doesn't speak.
+    // Everything is revealed at this point, so re-score locally instead.
+    if (over && window.score5) {
+      cv.result = [0, 1, 2, 3, 4].map(function (L) {
+        var a = L < 4 ? cv.P[0].lanes[L] : cv.P[0].held;
+        var b = L < 4 ? cv.P[1].lanes[L] : cv.P[1].held;
+        var av = a.length >= 5 ? window.score5(a.slice(0, 5)) : -1;
+        var bv = b.length >= 5 ? window.score5(b.slice(0, 5)) : -1;
+        return { av: av, bv: bv, r: av > bv ? 0 : (bv > av ? 1 : -1) };
+      });
+    }
+
+    return cv;
   }
 
-  function secondsLeft(deadline) {
-    if (!deadline) return null;
-    return Math.max(0, Math.round((new Date(deadline) - Date.now()) / 1000));
+  function paint(s) {
+    state = s;
+    deadline = s.deadline;
+
+    var cv = toCV(s);
+    cv.bank = (window.Chips && window.Chips.getBalance) ? window.Chips.getBalance() : 0;
+    window.CV = cv;
+    window.cvRender();
+
+    // The header's Deal button and stake picker mean nothing online.
+    var act = $('cvAction');
+    if (act) {
+      if (s.phase === 'done') { act.textContent = 'Play again'; act.disabled = false; }
+      else if (!s.yourTurn)   { act.textContent = 'Waiting\u2026'; act.disabled = true; }
+      else if (s.drawn !== null && s.drawn !== undefined) {
+        act.textContent = 'Pick lane'; act.disabled = true;
+      } else { act.textContent = 'Draw'; act.disabled = false; }
+    }
+
+    var stakes = $('cvStakes');
+    if (stakes) stakes.style.display = 'none';
+
+    if (s.phase !== 'done') {
+      var left = deadline ? Math.max(0, Math.round((new Date(deadline) - Date.now()) / 1000)) : null;
+      window.cvMsg(s.yourTurn
+        ? 'Your turn' + (left !== null ? ' \u2014 ' + left + 's' : '')
+        : (s.oppName || 'Opponent') + ' is thinking\u2026');
+    } else {
+      var r = s.result || {};
+      var won = s.winner && s.youAre &&
+                ((s.youAre === 'a' && r.winsA > r.winsB) || (s.youAre === 'b' && r.winsB > r.winsA));
+      window.cvMsg(
+        r.reason === 'push' ? 'Dead heat. Stakes returned.'
+        : r.reason === 'fold' ? (won ? 'They folded. You take the pot.' : 'You folded.')
+        : r.reason === 'timeout' ? (won ? 'They ran out of time.' : 'You ran out of time.')
+        : (won ? 'You take it ' : 'You lose it ') + r.winsA + '\u2013' + r.winsB +
+          (r.reason === 'total_strength' ? ' on total strength.' : '.'),
+        won ? 'win' : '');
+      if (window.Chips && window.Chips.syncBalance) window.Chips.syncBalance();
+    }
   }
 
-  /* The poll returns every 2s, so a clock driven by it jumps in 2-second
-     steps and reads as broken. This ticks locally off the cached deadline
-     and only touches the one text node. */
-  function startClock() {
-    stopClock();
+  // -------------------------------------------------------------- actions
+
+  async function send(payload) {
+    if (busy || !gameId) return;
+    busy = true;
+    try {
+      payload.gameId = gameId;
+      var r = await api('/api/convoy/action', { method: 'POST', body: payload });
+      if (r.state) paint(r.state);
+    } catch (e) {
+      window.cvMsg(friendly(e.message));
+    } finally { busy = false; }
+  }
+
+  /* Wrap rather than edit: top-level declarations live on window, so the
+     handlers cvBlock already bound resolve through these. */
+  function wrap() {
+    ['cvDraw', 'cvPlace', 'cvSwapInto', 'cvBetAct', 'cvNew'].forEach(function (n) {
+      if (!orig[n]) orig[n] = window[n];
+    });
+
+    window.cvDraw = function () {
+      if (!online) return orig.cvDraw.apply(null, arguments);
+      if (state && state.phase === 'done') return rejoin();
+      send({ action: 'draw' });
+    };
+
+    window.cvPlace = function (L) {
+      if (!online) return orig.cvPlace.apply(null, arguments);
+      if (!window.CV || !window.CV.drawn) return;
+      send({ action: 'place', lane: L });
+    };
+
+    window.cvSwapInto = function (k) {
+      if (!online) return orig.cvSwapInto.apply(null, arguments);
+      send({ action: 'swap', slot: k });
+    };
+
+    window.cvBetAct = function (side, type) {
+      if (!online) return orig.cvBetAct.apply(null, arguments);
+      send({ action: 'bet', bet: type === 'raise' ? 'raise'
+                            : type === 'fold' ? 'fold'
+                            : (state && state.betting && state.betting.youOwe > 0 ? 'call' : 'check') });
+    };
+
+    window.cvNew = function () {
+      if (!online) return orig.cvNew.apply(null, arguments);
+      rejoin();
+    };
+  }
+
+  // --------------------------------------------------------------- polling
+
+  function startPolling() {
+    stopPolling();
+    showTable();
+    refresh();
+    timer = setInterval(refresh, POLL_MS);
     tick = setInterval(function () {
-      var n = document.getElementById('coClock');
-      if (!n || !deadline) return;
-      var left = secondsLeft(deadline);
-      n.textContent = left + 's';
-      n.className = left <= 5 ? 'co-clock low' : 'co-clock';
+      if (!state || state.phase === 'done' || !state.yourTurn || !deadline) return;
+      var left = Math.max(0, Math.round((new Date(deadline) - Date.now()) / 1000));
+      window.cvMsg('Your turn \u2014 ' + left + 's');
     }, 1000);
   }
 
-  function stopClock() {
+  function stopPolling() {
+    if (timer) { clearInterval(timer); timer = null; }
     if (tick) { clearInterval(tick); tick = null; }
   }
 
-  function describeAction(a, who) {
-    if (!a) return '';
-    var lane = a.payload && a.payload.lane !== undefined ? ' in lane ' + (a.payload.lane + 1) : '';
-    return ({
-      place: who + ' placed a card' + lane + '.',
-      swap:  who + ' swapped into their hand.',
-      draw:  who + ' drew.',
-      check: who + ' checked.',
-      call:  who + ' called.',
-      raise: who + ' raised' + (a.payload && a.payload.amount
-               ? ' ' + Number(a.payload.amount).toLocaleString() : '') + '.',
-      fold:  who + ' folded.',
-    })[a.action] || '';
+  async function refresh() {
+    if (busy || !gameId) return;
+    try { paint(await api('/api/convoy/state?gameId=' + gameId)); }
+    catch (e) { /* transient — the next poll retries */ }
   }
 
-  function msg(text, cls) {
-    var m = document.getElementById('coMsg');
-    if (m) { m.textContent = text; m.className = 'msg' + (cls ? ' ' + cls : ''); }
-  }
+  // ----------------------------------------------------------------- lobby
 
-  // ------------------------------------------------------------------ lobby
-
-  function renderLobby(note) {
+  function showLobby(note) {
     stopPolling();
-    el().innerHTML =
-      '<div class="cv-block">' +
-        '<div class="cv-head"><b>Convoy \u2014 online</b></div>' +
-        '<p class="muted" style="font-size:12.5px;margin:6px 0 12px">' +
-          'Heads-up against another player. Pick a stake and you\u2019ll be ' +
-          'matched with whoever\u2019s waiting.</p>' +
-        '<div class="mode-row" id="coStakes">' +
+    $('convoyView').style.display = 'none';
+    var box = $('convoyOnline');
+    box.style.display = '';
+    box.innerHTML =
+      '<div class="cv-block" style="margin-top:12px">' +
+        '<div class="cv-head"><div><div class="stage" style="font-size:14px">Online</div>' +
+        '<div class="sub" style="margin-top:3px">Heads-up against another player</div></div></div>' +
+        '<div class="mode-row" id="coStakes" style="margin-top:12px">' +
           STAKES.map(function (s) {
-            return '<button class="mode-btn" data-stake="' + s + '">' +
-                   s.toLocaleString() + '</button>';
+            return '<button class="mode-btn" data-stake="' + s + '">' + s + '</button>';
           }).join('') +
         '</div>' +
-        '<p class="msg" id="coMsg" style="margin-top:10px">' + (note || '') + '</p>' +
+        '<div class="msg" id="coMsg" style="margin-top:10px">' + (note || 'Pick a stake.') + '</div>' +
         '<div style="border-top:1px solid var(--edge);margin-top:14px;padding-top:12px">' +
-          '<p class="muted" style="font-size:12.5px;margin:0 0 8px">' +
-            'Or open a private table and send the link to someone.</p>' +
-          '<div class="mode-row">' +
-            '<button class="mode-btn" id="coPrivate">Open a private table</button>' +
-          '</div>' +
+          '<button class="chipbtn" id="coPrivate" style="width:100%;padding:11px">Open a private table</button>' +
           '<div class="mode-row" style="margin-top:6px">' +
-            '<input id="coJoinCode" placeholder="Have a code?" maxlength="6" ' +
-              'style="flex:2;min-width:0;padding:10px;border-radius:4px;' +
-              'border:1px solid var(--edge);background:#0d1012;color:inherit;' +
-              'text-transform:uppercase;letter-spacing:.12em;text-align:center">' +
-            '<button class="mode-btn" id="coJoinCodeBtn" style="flex:1">Join</button>' +
+            '<input id="coCode" placeholder="Have a code?" maxlength="6" ' +
+              'style="flex:2;min-width:0;padding:10px;border-radius:4px;border:1px solid var(--edge);' +
+              'background:#0d1012;color:inherit;text-transform:uppercase;text-align:center;' +
+              'letter-spacing:.12em">' +
+            '<button class="chipbtn" id="coJoin" style="flex:1">Join</button>' +
           '</div>' +
         '</div>' +
       '</div>';
 
-    Array.prototype.forEach.call(
-      document.querySelectorAll('#coStakes .mode-btn'),
-      function (b) {
-        b.addEventListener('click', function () { join(Number(b.dataset.stake)); });
-      }
-    );
-
-    document.getElementById('coPrivate').addEventListener('click', function () {
-      createInvite(pendingStake || STAKES[0]);
+    Array.prototype.forEach.call(box.querySelectorAll('#coStakes .mode-btn'), function (b) {
+      b.addEventListener('click', function () { join(Number(b.dataset.stake)); });
     });
-
-    document.getElementById('coJoinCodeBtn').addEventListener('click', function () {
-      var v = document.getElementById('coJoinCode').value.trim();
-      if (v) redeemInvite(v);
+    $('coPrivate').addEventListener('click', function () { createInvite(STAKES[0]); });
+    $('coJoin').addEventListener('click', function () {
+      var v = $('coCode').value.trim();
+      if (v) redeem(v);
     });
   }
 
-  var pendingStake = null;
+  function note(t) { var n = $('coMsg'); if (n) n.textContent = t; }
 
-  // -------------------------------------------------------- private tables
+  function showTable() {
+    $('convoyOnline').style.display = 'none';
+    $('convoyView').style.display = '';
+  }
+
+  async function join(stake) {
+    note('Looking for a table\u2026');
+    try {
+      var r = await api('/api/convoy/join', { method: 'POST', body: { stake: stake } });
+      if (r.gameId) { gameId = r.gameId; startPolling(); }
+      else { note('Waiting for an opponent\u2026'); waitForMatch(stake); }
+    } catch (e) { note(friendly(e.message)); }
+  }
+
+  function waitForMatch(stake) {
+    stopPolling();
+    timer = setInterval(async function () {
+      try {
+        var r = await api('/api/convoy/join', { method: 'POST', body: { stake: stake } });
+        if (r.gameId) { gameId = r.gameId; startPolling(); }
+      } catch (e) {}
+    }, POLL_MS);
+  }
 
   async function createInvite(stake) {
-    msg('Opening a table\u2026');
+    note('Opening a table\u2026');
     try {
-      var r = await api('/api/convoy/invite', { method: 'POST', body: { stake: stake } });
-      renderInvite(r);
-      watchInvite(r.code);
-    } catch (e) {
-      msg(friendly(e.message), 'bad');
-    }
-  }
-
-  function renderInvite(inv) {
-    el().innerHTML =
-      '<div class="cv-block">' +
-        '<div class="cv-head"><b>Your table is open</b>' +
-          '<span class="muted">' + inv.stake.toLocaleString() + '</span></div>' +
-        '<p class="muted" style="font-size:12.5px;margin:8px 0">' +
-          'Send this to whoever you want to play. The game starts the moment ' +
-          'they join. Expires in 24 hours.</p>' +
-        '<div class="cv-invite-code" style="font-family:ui-monospace,Menlo,monospace;' +
-          'font-size:1.8rem;letter-spacing:.2em;text-align:center;padding:14px;' +
-          'border-radius:6px;background:rgba(0,0,0,.3);margin-bottom:10px;' +
-          'user-select:all">' + esc(inv.code) + '</div>' +
-        '<div class="mode-row">' +
-          '<button class="mode-btn" id="coShare">Share the link</button>' +
-          '<button class="mode-btn" id="coBack">Back</button>' +
-        '</div>' +
-        '<p class="msg" id="coMsg" style="margin-top:10px">Waiting for them to join\u2026</p>' +
-      '</div>';
-
-    document.getElementById('coShare').addEventListener('click', function () {
-      shareLink(inv);
-    });
-    document.getElementById('coBack').addEventListener('click', function () {
-      stopPolling();
-      renderLobby();
-    });
-  }
-
-  async function shareLink(inv) {
-    var text = 'Come play a hand of Convoy with me \u2014 heads-up, ' +
-               inv.stake.toLocaleString() + ' chips: ' + inv.link;
-
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: 'Stay in Your Lane', text: text, url: inv.link });
-        return;
-      } catch (e) { /* dismissed */ }
-    }
-
-    try {
-      await navigator.clipboard.writeText(inv.link);
-      msg('Link copied.');
-    } catch (e) {
-      msg('Copy failed \u2014 long-press the code.', 'bad');
-    }
+      var inv = await api('/api/convoy/invite', { method: 'POST', body: { stake: stake } });
+      showLobby('');
+      $('coMsg').innerHTML = 'Code <b style="letter-spacing:.2em">' + esc(inv.code) +
+        '</b> \u2014 <a href="#" id="coShare" style="color:var(--paint)">share the link</a>';
+      $('coShare').addEventListener('click', function (e) {
+        e.preventDefault();
+        var text = 'Play a hand of Convoy with me: ' + inv.link;
+        if (navigator.share) navigator.share({ text: text, url: inv.link }).catch(function () {});
+        else navigator.clipboard.writeText(inv.link).then(function () { note('Link copied.'); });
+      });
+      watchInvite(inv.code);
+    } catch (e) { note(friendly(e.message)); }
   }
 
   function watchInvite(code) {
@@ -237,370 +342,58 @@
     timer = setInterval(async function () {
       try {
         var r = await api('/api/convoy/invite?code=' + encodeURIComponent(code));
-        if (r.gameId) {
-          gameId = r.gameId;
-          startPolling();
-        } else if (r.expired) {
-          stopPolling();
-          renderLobby('That invite expired.');
-        }
-      } catch (e) { /* keep waiting */ }
+        if (r.gameId) { gameId = r.gameId; startPolling(); }
+        else if (r.expired) { stopPolling(); showLobby('That invite expired.'); }
+      } catch (e) {}
     }, POLL_MS);
   }
 
-  async function redeemInvite(code) {
-    msg('Joining\u2026');
+  async function redeem(code) {
+    note('Joining\u2026');
     try {
       var r = await api('/api/convoy/invite', { method: 'POST', body: { code: code } });
-      if (r.gameId) {
-        gameId = r.gameId;
-        startPolling();
-      }
-    } catch (e) {
-      msg(friendly(e.message), 'bad');
-    }
+      if (r.gameId) { gameId = r.gameId; startPolling(); }
+    } catch (e) { note(friendly(e.message)); }
   }
 
-  function esc(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
+  function rejoin() { gameId = null; state = null; showLobby(); }
 
-  async function join(stake) {
-    msg('Looking for a table\u2026');
-    try {
-      var r = await api('/api/convoy/join', { method: 'POST', body: { stake: stake } });
-
-      if (r.status === 'queued') {
-        renderWaiting(stake);
-        pollForMatch(stake);
-      } else if (r.gameId) {
-        gameId = r.gameId;
-        startPolling();
-      }
-    } catch (e) {
-      msg(friendly(e.message), 'bad');
-    }
-  }
-
-  function friendly(code) {
-    return ({
-      insufficient_chips: 'Not enough chips for that stake.',
-      no_profile: 'Your account isn\u2019t set up yet. Try signing out and back in.',
-      not_signed_in: 'Sign in to play online.',
-      bad_stake: 'That stake isn\u2019t available.',
-      already_in_game: 'You\u2019re already at a table.',
-      cannot_join_own_table: 'That\u2019s your own invite.',
-      invite_already_used: 'Someone else took that seat.',
-      invite_expired: 'That invite has expired.',
-      unknown_code: 'No table with that code.',
-      host_short_on_chips: 'The host is short on chips.',
-    })[code] || code;
-  }
-
-  function renderWaiting(stake) {
-    el().innerHTML =
-      '<div class="cv-block">' +
-        '<div class="cv-head"><b>Waiting for an opponent</b></div>' +
-        '<p class="muted" style="font-size:12.5px;margin:8px 0">' +
-          'Stake ' + stake.toLocaleString() + '. You\u2019ll drop in as soon as ' +
-          'someone joins.</p>' +
-        '<button class="mode-btn" id="coCancel">Leave the queue</button>' +
-        '<p class="msg" id="coMsg"></p>' +
-      '</div>';
-
-    document.getElementById('coCancel').addEventListener('click', function () {
-      stopPolling();
-      renderLobby('Left the queue.');
-    });
-  }
-
-  function pollForMatch(stake) {
-    stopPolling();
-    timer = setInterval(async function () {
-      try {
-        var r = await api('/api/convoy/join', { method: 'POST', body: { stake: stake } });
-        if (r.gameId) {
-          gameId = r.gameId;
-          startPolling();
-        }
-      } catch (e) { /* keep waiting */ }
-    }, POLL_MS);
-  }
-
-  // ------------------------------------------------------------------ table
-
-  function startPolling() {
-    stopPolling();
-    refresh();
-    timer = setInterval(refresh, POLL_MS);
-  }
-
-  function stopPolling() {
-    if (timer) { clearInterval(timer); timer = null; }
-    stopClock();
-  }
-
-  async function refresh() {
-    if (busy || !gameId) return;
-    try {
-      state = await api('/api/convoy/state?gameId=' + gameId);
-      renderTable();
-    } catch (e) {
-      msg('Connection trouble \u2014 retrying\u2026');
-    }
-  }
-
-  function laneHTML(cards, idx, clickable, read, isBest) {
-    var full = cards.length >= 5;
-    var html = '<div class="cv-lane' + (clickable && !full ? ' sel' : '') +
-                 (isBest ? ' won' : '') + '"' +
-                 (clickable && !full ? ' data-lane="' + idx + '"' : '') + '>' +
-                 '<span class="cv-num">' + (idx + 1) + '</span>' +
-                 cards.map(function (c) { return cardHTML(c); }).join('') +
-               '</div>';
-
-    if (read && read.label) {
-      html += '<div class="co-read' + (isBest ? ' best' : '') + '">' +
-              esc(read.label) + (isBest ? ' \u2190 best' : '') + '</div>';
-    }
-    return html;
-  }
-
-  function injectStyles() {
-    if (document.getElementById('co-styles')) return;
-    var st = document.createElement('style');
-    st.id = 'co-styles';
-    st.textContent = [
-      '.co-read{font-size:10.5px;opacity:.6;margin:1px 0 5px 18px;letter-spacing:.02em}',
-      '.co-read.best{opacity:1;color:var(--paint,#f5c518);font-weight:600}',
-      '.co-clock{font-variant-numeric:tabular-nums}',
-      '.co-clock.low{color:#ff8080;font-weight:700}',
-      '.co-who{display:flex;align-items:center;gap:6px;font-size:10px;',
-      'letter-spacing:.08em;text-transform:uppercase;opacity:.6;margin:8px 0 4px}',
-      '.co-dot{width:6px;height:6px;border-radius:50%;background:#4bb8e8}',
-      '.co-dot.acting{background:var(--paint,#f5c518);animation:coPulse 1.4s infinite}',
-      '@keyframes coPulse{0%,100%{opacity:1}50%{opacity:.3}}',
-      '.co-log{font-size:11.5px;opacity:.7;margin:6px 0 0;min-height:14px}',
-    ].join('');
-    document.head.appendChild(st);
-  }
-
-  function renderTable() {
-    var s = state;
-    if (!s || s.error) { renderLobby('That game has ended.'); return; }
-
-    if (s.phase === 'done') { renderResult(s); return; }
-
-    injectStyles();
-
-    var mine = s.lanes || [], theirs = s.oppLanes || [];
-    var reads = s.handReads || [];
-    var drawn = s.drawn;
-
-    deadline = s.deadline;
-    var secs = secondsLeft(s.deadline);
-
-    var html =
-      '<div class="cv-block' + (s.yourTurn ? ' turn' : '') + '">' +
-        '<div class="cv-head"><b>Pot ' + s.pot.toLocaleString() + '</b>' +
-          '<span class="muted">' + s.pileLeft + ' left \u00b7 ' +
-          '<span id="coClock" class="co-clock' + (secs !== null && secs <= 5 ? ' low' : '') +
-          '">' + (secs !== null ? secs + 's' : '\u2014') + '</span></span></div>';
-
-    // opponent
-    html += '<div class="co-who">' +
-              '<span class="co-dot' + (!s.yourTurn ? ' acting' : '') + '"></span>' +
-              esc(s.oppName || 'Opponent') +
-            '</div>';
-    theirs.forEach(function (l, i) { html += laneHTML(l, i, false); });
-    html += '<div class="cv-held">' +
-              Array(s.oppHeldCount).fill(0).map(function () { return cardHTML(null); }).join('') +
-            '</div>';
-    html += '<p class="co-log" id="coLog">' +
-            esc(describeAction(s.lastAction, s.oppName || 'They')) + '</p>';
-
-    // you
-    html += '<div class="co-who" style="margin-top:12px">' +
-              '<span class="co-dot' + (s.yourTurn ? ' acting' : '') + '"></span>' +
-              esc(s.you || 'You') +
-            '</div>';
-    mine.forEach(function (l, i) {
-      html += laneHTML(l, i,
-        s.yourTurn && s.phase === 'building' && drawn !== null,
-        reads[i], s.bestLane === i);
-    });
-
-    html += '<div class="cv-held" id="coHeld">' +
-              (s.held || []).map(function (c, i) {
-                var swappable = s.yourTurn && s.canSwap && drawn !== null &&
-                                s.phase === 'building';
-                return cardHTML(c, swappable ? 'sel" data-slot="' + i : '');
-              }).join('') +
-            '</div>' +
-            '<div class="co-read">Sealed hand: ' + esc(s.heldRead || '') + '</div>';
-
-    html += '<p class="msg" id="coMsg"></p>';
-
-    // controls
-    if (s.phase === 'checkpoint') {
-      html += betControls(s);
-    } else if (s.yourTurn) {
-      html += drawn === null
-        ? '<button class="mode-btn" id="coDraw">Draw a card</button>'
-        : '<div class="cv-head" style="margin-top:8px"><span class="muted">Drawn</span>' +
-          cardHTML(drawn) + '</div>' +
-          '<p class="muted" style="font-size:12px;margin:6px 0 0">Tap a lane' +
-          (s.canSwap ? ', or a held card to swap it in.' : '.') + '</p>';
-    } else {
-      html += '<p class="muted" style="font-size:12.5px;margin-top:8px">' +
-              'Waiting for your opponent\u2026</p>';
-    }
-
-    html += '</div>';
-    el().innerHTML = html;
-    wire();
-    startClock();
-  }
-
-  function betControls(s) {
-    var owe = s.betting ? s.betting.youOwe : 0;
-    if (!s.yourTurn) {
-      return '<p class="muted" style="font-size:12.5px;margin-top:8px">' +
-             'Checkpoint \u2014 waiting for your opponent.</p>';
-    }
-    return '<p style="font-size:12.5px;margin:8px 0 6px">Checkpoint \u2014 every ' +
-           'lane is three deep.' + (owe > 0 ? ' You owe ' + owe.toLocaleString() + '.' : '') +
-           '</p>' +
-           '<div class="mode-row">' +
-             '<button class="mode-btn" data-bet="' + (owe > 0 ? 'call' : 'check') + '">' +
-               (owe > 0 ? 'Call ' + owe.toLocaleString() : 'Check') + '</button>' +
-             (s.betting.raises < s.betting.maxRaises
-               ? '<button class="mode-btn" data-bet="raise">Raise</button>' : '') +
-             '<button class="mode-btn" data-bet="fold">Fold</button>' +
-           '</div>';
-  }
-
-  function renderResult(s) {
-    stopPolling();
-    var r = s.result || {};
-    var won = s.winner && s.winner === myId(s);
-    var line = r.reason === 'push' ? 'Dead heat. Stakes returned.'
-             : r.reason === 'fold' ? (won ? (s.oppName || 'They') + ' folded. You take the pot.' : 'You folded.')
-             : r.reason === 'timeout' ? (won ? (s.oppName || 'They') + ' ran out of time.' : 'You ran out of time.')
-             : (won ? 'You take it ' : 'You lose it ') + r.winsA + '\u2013' + r.winsB +
-               (r.reason === 'total_strength' ? ' on total strength.' : '.');
-
-    el().innerHTML =
-      '<div class="cv-block">' +
-        '<div class="cv-head"><b>' + (won ? 'Winner' : 'Game over') + '</b></div>' +
-        '<p style="margin:8px 0 12px">' + line + '</p>' +
-        '<div class="muted" style="font-size:10px;text-transform:uppercase;' +
-          'letter-spacing:.08em;margin-bottom:4px">Their hand</div>' +
-        '<div class="cv-held">' +
-          (s.oppHeld || []).map(function (c) { return cardHTML(c); }).join('') +
-        '</div>' +
-        '<button class="mode-btn" id="coAgain" style="margin-top:12px">Play again</button>' +
-      '</div>';
-
-    document.getElementById('coAgain').addEventListener('click', function () {
-      gameId = null; state = null;
-      renderLobby();
-    });
-  }
-
-  // The state payload doesn't name you, but yourTurn and winner are both
-  // compared server-side. Cache your id from the session instead.
-  var _myId = null;
-  function myId() { return _myId; }
-
-  function wire() {
-    var d = document.getElementById('coDraw');
-    if (d) d.addEventListener('click', function () { act({ action: 'draw' }); });
-
-    Array.prototype.forEach.call(document.querySelectorAll('[data-lane]'), function (n) {
-      n.addEventListener('click', function () {
-        act({ action: 'place', lane: Number(n.dataset.lane) });
-      });
-    });
-
-    Array.prototype.forEach.call(document.querySelectorAll('[data-slot]'), function (n) {
-      n.addEventListener('click', function () {
-        act({ action: 'swap', slot: Number(n.dataset.slot) });
-      });
-    });
-
-    Array.prototype.forEach.call(document.querySelectorAll('[data-bet]'), function (n) {
-      n.addEventListener('click', function () {
-        act({ action: 'bet', bet: n.dataset.bet });
-      });
-    });
-  }
-
-  async function act(payload) {
-    if (busy) return;
-    busy = true;
-    try {
-      payload.gameId = gameId;
-      var r = await api('/api/convoy/action', { method: 'POST', body: payload });
-      if (r.state) { state = r.state; renderTable(); }
-    } catch (e) {
-      msg(friendly(e.message), 'bad');
-    } finally {
-      busy = false;
-    }
-  }
-
-  // ----------------------------------------------------------------- public
+  // ---------------------------------------------------------------- public
 
   window.ConvoyOnline = {
     mount: async function () {
-      try {
-        var s = await window.sb.auth.getSession();
-        _myId = s.data.session ? s.data.session.user.id : null;
-      } catch (e) { _myId = null; }
+      wrap();
+      online = true;
+      if (!offlineCV) offlineCV = window.CV;   // keep the offline game intact
 
-      // Arrived from an invite link? Take the seat before anything else.
       var invited = null;
-      try {
-        invited = new URLSearchParams(location.search).get('table');
-      } catch (e) {}
+      try { invited = new URLSearchParams(location.search).get('table'); } catch (e) {}
 
       if (invited) {
         try {
-          var inv = await api('/api/convoy/invite', {
-            method: 'POST', body: { code: invited },
-          });
-          if (inv.gameId) {
-            gameId = inv.gameId;
-            startPolling();
-            return;
-          }
-        } catch (e) {
-          renderLobby(friendly(e.message));
-          return;
-        }
+          var inv = await api('/api/convoy/invite', { method: 'POST', body: { code: invited } });
+          if (inv.gameId) { gameId = inv.gameId; startPolling(); return; }
+        } catch (e) { showLobby(friendly(e.message)); return; }
       }
 
-      // Already at a table? Drop straight back in.
       try {
         var r = await api('/api/convoy/join', { method: 'POST', body: { stake: STAKES[0] } });
-        if (r.status === 'rejoined' && r.gameId) {
-          gameId = r.gameId;
-          startPolling();
-          return;
-        }
-        if (r.status === 'queued') {
-          renderWaiting(STAKES[0]);
-          pollForMatch(STAKES[0]);
-          return;
-        }
+        if (r.status === 'rejoined' && r.gameId) { gameId = r.gameId; startPolling(); return; }
         if (r.gameId) { gameId = r.gameId; startPolling(); return; }
-      } catch (e) { /* fall through to the lobby */ }
+      } catch (e) {}
 
-      renderLobby();
+      showLobby();
     },
-    unmount: function () { stopPolling(); el().innerHTML = ''; },
+
+    unmount: function () {
+      stopPolling();
+      online = false;
+      gameId = null;
+      state = null;
+      $('convoyView').style.display = 'none';
+      var stakes = $('cvStakes');
+      if (stakes) stakes.style.display = '';
+      if (offlineCV) { window.CV = offlineCV; offlineCV = null; window.cvRender(); }
+    },
   };
 })();
