@@ -1,6 +1,6 @@
 /* Stay in Your Lane — service worker
    Bump CACHE on every deploy or phones will keep serving the old build. */
-const CACHE = 'lane-poker-v11';
+const CACHE = 'lane-poker-v12';
 
 const SHELL = [
   './',
