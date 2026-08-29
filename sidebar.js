@@ -169,20 +169,61 @@
     p.innerHTML =
       '<div class="sb-me">' + avatarHTML(account.avatar, 44) +
         '<div><b>' + esc(account.displayName || 'Player') + '</b>' +
-        '<small>' + Number(account.chips || 0).toLocaleString() + ' chips</small></div>' +
+        '<small>' + Number(account.chips || 0).toLocaleString() + ' chips' +
+          (account.tier ? ' \u00b7 ' + esc(account.tier.name) : '') + '</small></div>' +
       '</div>' +
       '<div class="sb-tabs">' +
         '<button class="sb-tab' + (tab === 'account' ? ' on' : '') + '" data-tab="account">Account</button>' +
+        '<button class="sb-tab' + (tab === 'ranks' ? ' on' : '') + '" data-tab="ranks">Ranks</button>' +
         '<button class="sb-tab' + (tab === 'settings' ? ' on' : '') + '" data-tab="settings">Settings</button>' +
       '</div>' +
-      (tab === 'account' ? accountTab() : settingsTab());
+      (tab === 'account' ? accountTab() : tab === 'ranks' ? ranksTab() : settingsTab());
 
     Array.prototype.forEach.call(p.querySelectorAll('[data-tab]'), function (b) {
       b.addEventListener('click', function () { tab = b.dataset.tab; render(); });
     });
 
     if (tab === 'account') wireAccount();
+    else if (tab === 'ranks') wireRanks();
     else wireSettings();
+  }
+
+  function ranksTab() {
+    return '<div id="sbProgress"></div>' +
+           '<div id="sbBoard" style="margin-top:6px"></div>' +
+           '<div class="sb-field" style="margin-top:16px">' +
+             '<label>Where you play</label>' +
+             '<input id="sbCountry" maxlength="2" placeholder="US" ' +
+               'style="text-transform:uppercase" value="' + esc(account.country || '') + '">' +
+             '<input id="sbRegion" maxlength="60" placeholder="Las Vegas" ' +
+               'style="margin-top:6px" value="' + esc(account.region || '') + '">' +
+             '<p class="sb-note">Two-letter country code and your city. Used only ' +
+               'for the national and local boards.</p>' +
+             '<button class="sb-btn ghost" id="sbSaveLoc">Save</button>' +
+           '</div>';
+  }
+
+  function wireRanks() {
+    if (window.Social) {
+      window.Social.progress(document.getElementById('sbProgress'));
+      window.Social.leaderboard(document.getElementById('sbBoard'), 'global');
+    }
+
+    document.getElementById('sbSaveLoc').addEventListener('click', async function () {
+      var c = document.getElementById('sbCountry').value.trim().toUpperCase();
+      var r = document.getElementById('sbRegion').value.trim();
+      try {
+        var res = await api('/api/social/leaderboard', {
+          method: 'POST', body: { country: c || null, region: r || null },
+        });
+        if (res.ok) {
+          account.country = c; account.region = r;
+          if (window.Social) {
+            window.Social.leaderboard(document.getElementById('sbBoard'), 'global');
+          }
+        }
+      } catch (e) { /* the note below the field says what's needed */ }
+    });
   }
 
   function accountTab() {
