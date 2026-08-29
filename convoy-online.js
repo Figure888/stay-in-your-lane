@@ -27,6 +27,7 @@
   var POLL_MS = 2000;
 
   var mount = null, timer = null, state = null, gameId = null, busy = false;
+  var tick = null, deadline = null, lastSeenAction = null;
 
   // ---------------------------------------------------------------- helpers
 
@@ -79,6 +80,39 @@
   function secondsLeft(deadline) {
     if (!deadline) return null;
     return Math.max(0, Math.round((new Date(deadline) - Date.now()) / 1000));
+  }
+
+  /* The poll returns every 2s, so a clock driven by it jumps in 2-second
+     steps and reads as broken. This ticks locally off the cached deadline
+     and only touches the one text node. */
+  function startClock() {
+    stopClock();
+    tick = setInterval(function () {
+      var n = document.getElementById('coClock');
+      if (!n || !deadline) return;
+      var left = secondsLeft(deadline);
+      n.textContent = left + 's';
+      n.className = left <= 5 ? 'co-clock low' : 'co-clock';
+    }, 1000);
+  }
+
+  function stopClock() {
+    if (tick) { clearInterval(tick); tick = null; }
+  }
+
+  function describeAction(a, who) {
+    if (!a) return '';
+    var lane = a.payload && a.payload.lane !== undefined ? ' in lane ' + (a.payload.lane + 1) : '';
+    return ({
+      place: who + ' placed a card' + lane + '.',
+      swap:  who + ' swapped into their hand.',
+      draw:  who + ' drew.',
+      check: who + ' checked.',
+      call:  who + ' called.',
+      raise: who + ' raised' + (a.payload && a.payload.amount
+               ? ' ' + Number(a.payload.amount).toLocaleString() : '') + '.',
+      fold:  who + ' folded.',
+    })[a.action] || '';
   }
 
   function msg(text, cls) {
@@ -305,6 +339,7 @@
 
   function stopPolling() {
     if (timer) { clearInterval(timer); timer = null; }
+    stopClock();
   }
 
   async function refresh() {
@@ -317,13 +352,39 @@
     }
   }
 
-  function laneHTML(cards, idx, clickable) {
+  function laneHTML(cards, idx, clickable, read, isBest) {
     var full = cards.length >= 5;
-    return '<div class="cv-lane' + (clickable && !full ? ' sel' : '') + '"' +
-             (clickable && !full ? ' data-lane="' + idx + '"' : '') + '>' +
-             '<span class="cv-num">' + (idx + 1) + '</span>' +
-             cards.map(function (c) { return cardHTML(c); }).join('') +
-           '</div>';
+    var html = '<div class="cv-lane' + (clickable && !full ? ' sel' : '') +
+                 (isBest ? ' won' : '') + '"' +
+                 (clickable && !full ? ' data-lane="' + idx + '"' : '') + '>' +
+                 '<span class="cv-num">' + (idx + 1) + '</span>' +
+                 cards.map(function (c) { return cardHTML(c); }).join('') +
+               '</div>';
+
+    if (read && read.label) {
+      html += '<div class="co-read' + (isBest ? ' best' : '') + '">' +
+              esc(read.label) + (isBest ? ' \u2190 best' : '') + '</div>';
+    }
+    return html;
+  }
+
+  function injectStyles() {
+    if (document.getElementById('co-styles')) return;
+    var st = document.createElement('style');
+    st.id = 'co-styles';
+    st.textContent = [
+      '.co-read{font-size:10.5px;opacity:.6;margin:1px 0 5px 18px;letter-spacing:.02em}',
+      '.co-read.best{opacity:1;color:var(--paint,#f5c518);font-weight:600}',
+      '.co-clock{font-variant-numeric:tabular-nums}',
+      '.co-clock.low{color:#ff8080;font-weight:700}',
+      '.co-who{display:flex;align-items:center;gap:6px;font-size:10px;',
+      'letter-spacing:.08em;text-transform:uppercase;opacity:.6;margin:8px 0 4px}',
+      '.co-dot{width:6px;height:6px;border-radius:50%;background:#4bb8e8}',
+      '.co-dot.acting{background:var(--paint,#f5c518);animation:coPulse 1.4s infinite}',
+      '@keyframes coPulse{0%,100%{opacity:1}50%{opacity:.3}}',
+      '.co-log{font-size:11.5px;opacity:.7;margin:6px 0 0;min-height:14px}',
+    ].join('');
+    document.head.appendChild(st);
   }
 
   function renderTable() {
@@ -332,29 +393,43 @@
 
     if (s.phase === 'done') { renderResult(s); return; }
 
+    injectStyles();
+
     var mine = s.lanes || [], theirs = s.oppLanes || [];
-    var secs = secondsLeft(s.deadline);
+    var reads = s.handReads || [];
     var drawn = s.drawn;
+
+    deadline = s.deadline;
+    var secs = secondsLeft(s.deadline);
 
     var html =
       '<div class="cv-block' + (s.yourTurn ? ' turn' : '') + '">' +
         '<div class="cv-head"><b>Pot ' + s.pot.toLocaleString() + '</b>' +
-          '<span class="muted">' + s.pileLeft + ' left' +
-          (secs !== null ? ' \u00b7 ' + secs + 's' : '') + '</span></div>';
+          '<span class="muted">' + s.pileLeft + ' left \u00b7 ' +
+          '<span id="coClock" class="co-clock' + (secs !== null && secs <= 5 ? ' low' : '') +
+          '">' + (secs !== null ? secs + 's' : '\u2014') + '</span></span></div>';
 
     // opponent
-    html += '<div class="muted" style="font-size:10px;letter-spacing:.08em;' +
-            'text-transform:uppercase;margin:8px 0 4px">Opponent</div>';
+    html += '<div class="co-who">' +
+              '<span class="co-dot' + (!s.yourTurn ? ' acting' : '') + '"></span>' +
+              esc(s.oppName || 'Opponent') +
+            '</div>';
     theirs.forEach(function (l, i) { html += laneHTML(l, i, false); });
     html += '<div class="cv-held">' +
               Array(s.oppHeldCount).fill(0).map(function () { return cardHTML(null); }).join('') +
             '</div>';
+    html += '<p class="co-log" id="coLog">' +
+            esc(describeAction(s.lastAction, s.oppName || 'They')) + '</p>';
 
     // you
-    html += '<div class="muted" style="font-size:10px;letter-spacing:.08em;' +
-            'text-transform:uppercase;margin:12px 0 4px">You</div>';
+    html += '<div class="co-who" style="margin-top:12px">' +
+              '<span class="co-dot' + (s.yourTurn ? ' acting' : '') + '"></span>' +
+              esc(s.you || 'You') +
+            '</div>';
     mine.forEach(function (l, i) {
-      html += laneHTML(l, i, s.yourTurn && s.phase === 'building' && drawn !== null);
+      html += laneHTML(l, i,
+        s.yourTurn && s.phase === 'building' && drawn !== null,
+        reads[i], s.bestLane === i);
     });
 
     html += '<div class="cv-held" id="coHeld">' +
@@ -363,7 +438,8 @@
                                 s.phase === 'building';
                 return cardHTML(c, swappable ? 'sel" data-slot="' + i : '');
               }).join('') +
-            '</div>';
+            '</div>' +
+            '<div class="co-read">Sealed hand: ' + esc(s.heldRead || '') + '</div>';
 
     html += '<p class="msg" id="coMsg"></p>';
 
@@ -385,6 +461,7 @@
     html += '</div>';
     el().innerHTML = html;
     wire();
+    startClock();
   }
 
   function betControls(s) {
@@ -410,8 +487,8 @@
     var r = s.result || {};
     var won = s.winner && s.winner === myId(s);
     var line = r.reason === 'push' ? 'Dead heat. Stakes returned.'
-             : r.reason === 'fold' ? (won ? 'They folded. You take the pot.' : 'You folded.')
-             : r.reason === 'timeout' ? (won ? 'They ran out of time.' : 'You ran out of time.')
+             : r.reason === 'fold' ? (won ? (s.oppName || 'They') + ' folded. You take the pot.' : 'You folded.')
+             : r.reason === 'timeout' ? (won ? (s.oppName || 'They') + ' ran out of time.' : 'You ran out of time.')
              : (won ? 'You take it ' : 'You lose it ') + r.winsA + '\u2013' + r.winsB +
                (r.reason === 'total_strength' ? ' on total strength.' : '.');
 
