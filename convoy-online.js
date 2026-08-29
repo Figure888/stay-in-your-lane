@@ -395,7 +395,6 @@
       online = false;
       gameId = null;
       state = null;
-      $('convoyView').style.display = 'none';
       var stakes = $('cvStakes');
       if (stakes) stakes.style.display = '';
       if (offlineCV) { window.CV = offlineCV; offlineCV = null; window.cvRender(); }
