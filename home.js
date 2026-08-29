@@ -38,14 +38,15 @@
     s.id = STYLE_ID;
     s.textContent = [
       '.hm-hero{position:relative;border-radius:9px;overflow:hidden;margin-top:12px;',
-      'border:1px solid var(--edge,#333);padding:22px 18px;',
-      'background:radial-gradient(120% 90% at 18% 0%,#26313a 0%,#141a1e 55%,#0d1114 100%)}',
-      '.hm-hero:after{content:"";position:absolute;inset:0;pointer-events:none;',
-      'background:repeating-linear-gradient(90deg,transparent 0 38px,rgba(255,255,255,.022) 38px 40px)}',
-      '.hm-hero h1{font-family:var(--display,inherit);font-size:26px;margin:0 0 6px;line-height:1.05}',
-      '.hm-hero p{margin:0;font-size:13px;opacity:.72;line-height:1.5;max-width:31ch}',
-      '.hm-lanes{display:flex;gap:4px;margin-top:16px}',
-      '.hm-lanes i{height:3px;flex:1;border-radius:2px;background:rgba(255,255,255,.15)}',
+      'border:1px solid var(--edge,#333);aspect-ratio:1536/860;background:#0d1114}',
+      '.hm-hero img{width:100%;height:100%;object-fit:cover;display:block}',
+      /* The art is busy, so the copy sits on a gradient rather than straight
+         on top of it — otherwise the text disappears into the skyline. */
+      '.hm-hero .cap{position:absolute;left:0;right:0;bottom:0;padding:34px 16px 14px;',
+      'background:linear-gradient(transparent,rgba(8,10,12,.82) 46%,rgba(8,10,12,.95))}',
+      '.hm-hero p{margin:0;font-size:12.5px;opacity:.86;line-height:1.5;max-width:34ch}',
+      '.hm-lanes{display:flex;gap:4px;margin-top:11px}',
+      '.hm-lanes i{height:3px;flex:1;border-radius:2px;background:rgba(255,255,255,.18)}',
       '.hm-lanes i:nth-child(2){background:var(--paint,#f5c518)}',
 
       '.hm-me{display:flex;align-items:center;gap:12px;padding:14px 0;',
@@ -104,10 +105,12 @@
 
     host.innerHTML =
       '<div class="hm-hero">' +
-        '<h1>Stay in Your Lane</h1>' +
-        '<p>A poker variant of my own making. Four open lanes, one sealed hand, ' +
-          'best of five takes it.</p>' +
-        '<div class="hm-lanes"><i></i><i></i><i></i><i></i></div>' +
+        '<img src="./hero-band.jpg" alt="Stay in Your Lane" loading="eager" ' +
+          'width="1200" height="672">' +
+        '<div class="cap">' +
+          '<p>Four open lanes, one sealed hand. Best of five takes it.</p>' +
+          '<div class="hm-lanes"><i></i><i></i><i></i><i></i></div>' +
+        '</div>' +
       '</div>' +
 
       '<div class="hm-me">' +
