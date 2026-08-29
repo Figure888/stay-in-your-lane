@@ -185,8 +185,8 @@
     if (busy || !gameId) return;
     busy = true;
     try {
-      payload.gameId = gameId;
-      var r = await api('/api/convoy/action', { method: 'POST', body: payload });
+      payload.do = payload.action; delete payload.action; payload.gameId = gameId;
+      var r = await api('/api/table', { method: 'POST', body: payload });
       if (r.state) paint(r.state);
     } catch (e) {
       window.cvMsg(friendly(e.message));
@@ -256,7 +256,7 @@
 
   async function refresh() {
     if (busy || !gameId) return;
-    try { paint(await api('/api/convoy/state?gameId=' + gameId)); }
+    try { paint(await api('/api/table?game=convoy&gameId=' + gameId)); }
     catch (e) { /* transient — the next poll retries */ }
   }
 
@@ -309,7 +309,7 @@
   async function join(stake) {
     note('Looking for a table\u2026');
     try {
-      var r = await api('/api/convoy/join', { method: 'POST', body: { stake: stake } });
+      var r = await api('/api/table', { method: 'POST', body: { do: 'join', stake: stake } });
       if (r.gameId) { gameId = r.gameId; startPolling(); }
       else { note('Waiting for an opponent\u2026'); waitForMatch(stake); }
     } catch (e) { note(friendly(e.message)); }
@@ -319,7 +319,7 @@
     stopPolling();
     timer = setInterval(async function () {
       try {
-        var r = await api('/api/convoy/join', { method: 'POST', body: { stake: stake } });
+        var r = await api('/api/table', { method: 'POST', body: { do: 'join', stake: stake } });
         if (r.gameId) { gameId = r.gameId; startPolling(); }
       } catch (e) {}
     }, POLL_MS);
@@ -382,7 +382,7 @@
       }
 
       try {
-        var r = await api('/api/convoy/join', { method: 'POST', body: { stake: STAKES[0] } });
+        var r = await api('/api/table', { method: 'POST', body: { do: 'join', stake: STAKES[0] } });
         if (r.status === 'rejoined' && r.gameId) { gameId = r.gameId; startPolling(); return; }
         if (r.gameId) { gameId = r.gameId; startPolling(); return; }
       } catch (e) {}
@@ -395,6 +395,7 @@
       online = false;
       gameId = null;
       state = null;
+      $('convoyView').style.display = 'none';
       var stakes = $('cvStakes');
       if (stakes) stakes.style.display = '';
       if (offlineCV) { window.CV = offlineCV; offlineCV = null; window.cvRender(); }
