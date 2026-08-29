@@ -1190,6 +1190,7 @@ $('modeConvoy').onclick=function(){setMode('convoy');};
 $('modeOnline').onclick=function(){setMode('online');};
 $('modeStore').onclick=function(){setMode('store');};
 
+if(new URLSearchParams(location.search).get("table"))setMode("online");
 newTable();cvRender();
 $('btnFold').disabled=true;$('btnRaise').disabled=true;$('btnCall').disabled=false;$('btnCall').textContent='Deal';
 </script>
