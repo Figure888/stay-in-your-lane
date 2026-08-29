@@ -2,10 +2,12 @@
   "type": "module",
   "dependencies": {
     "@supabase/supabase-js": "^2",
-    "@whop/api": "latest",
-    "pg": "^8.23.0"
+    "@whop/api": "latest"
   },
   "engines": {
     "node": "22.x"
+  },
+  "devDependencies": {
+    "pg": "^8.23.0"
   }
 }
