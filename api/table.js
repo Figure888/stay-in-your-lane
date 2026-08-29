@@ -51,6 +51,12 @@ export default async function handler(req, res) {
         return res.status(state.error ? 403 : 200).json(state);
       }
 
+      if (src.do === 'invite') {
+        const d = unwrap(await admin.rpc('convoy_invite_status',
+          { p_user: userId, p_code: String(src.code || '') }), 'invite_status');
+        return res.status(200).json(d);
+      }
+
       const gameId = Number(src.gameId);
       if (!Number.isInteger(gameId)) return res.status(400).json({ error: 'bad_game_id' });
       const state = unwrap(await admin.rpc('convoy_state',
@@ -106,6 +112,18 @@ export default async function handler(req, res) {
     }
 
     // ------------------------------------------------------------ convoy
+    if (op === 'invite' || op === 'redeem') {
+      if (!(await limit(res, userId, 'table:invite', 10, 60))) return;
+      const d = op === 'redeem'
+        ? unwrap(await admin.rpc('convoy_redeem_invite',
+            { p_user: userId, p_code: String(src.code || '') }), 'redeem')
+        : unwrap(await admin.rpc('convoy_create_invite',
+            { p_user: userId, p_stake: Number(src.stake) || CONVOY_STAKES[0] }), 'invite');
+      if (!d.ok) return res.status(400).json(d);
+      return res.status(200).json({ ...d,
+        link: d.code ? 'https://lanepoker.online/?table=' + d.code : undefined });
+    }
+
     if (op === 'join') {
       if (!(await limit(res, userId, 'table:join', 20, 60))) return;
       const stake = Number(src.stake);
