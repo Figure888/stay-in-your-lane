@@ -246,6 +246,7 @@ button.act-btn:disabled{opacity:.28;cursor:not-allowed}
   </header>
 
   <div class="mode-row">
+    <button class="mode-btn" id="modeHome">Home</button>
     <button class="mode-btn on" id="modeTable">Lane Hold'em</button>
     <button class="mode-btn" id="modeConvoy">Convoy &middot; 1v1</button>
     <button class="mode-btn" id="modeOnline">Online &middot; 1v1</button>
@@ -362,6 +363,7 @@ button.act-btn:disabled{opacity:.28;cursor:not-allowed}
     <div style="height:16px"></div>
   </div>
 
+  <div id="homeView"></div>
   <div id="onlineView" style="display:none"><div id="convoyOnline"></div></div>
   <div id="storeView" style="display:none">
     <div class="cv-block" style="margin-top:12px">
@@ -1176,16 +1178,20 @@ function setMode(m){
   $('convoyView').style.display=(m==='convoy')?'':'none';
   $('storeView').style.display=(m==='store')?'':'none';
   $('onlineView').style.display=(m==='online')?'':'none';
+  $('homeView').style.display=(m==='home')?'':'none';
   $('modeTable').className='mode-btn'+(m==='table'?' on':'');
   $('modeConvoy').className='mode-btn'+(m==='convoy'?' on':'');
   $('modeOnline').className='mode-btn'+(m==='online'?' on':'');
   $('modeStore').className='mode-btn'+(m==='store'?' on':'');
+  $('modeHome').className='mode-btn'+(m==='home'?' on':'');
   if(m==='convoy')cvRender();
   if(m==='store'&&window.renderPacks)window.renderPacks();
+  if(m==='home'&&window.Home)Home.mount();
   if(m==='online'&&window.ConvoyOnline)ConvoyOnline.mount();
   if(m!=='online'&&window.ConvoyOnline)ConvoyOnline.unmount();
 }
 $('modeTable').onclick=function(){setMode('table');};
+$('modeHome').onclick=function(){setMode('home');};
 $('modeConvoy').onclick=function(){setMode('convoy');};
 $('modeOnline').onclick=function(){setMode('online');};
 $('modeStore').onclick=function(){setMode('store');};
@@ -1209,6 +1215,8 @@ if ('serviceWorker' in navigator) {
 <script src="sidebar.js"></script>
 <script src="convoy-online.js"></script>
 <script src="social.js"></script>
+<script src="fx.js"></script>
+<script src="home.js"></script>
 </body>
 </html>
 <script async src="https://js.whop.com/static/checkout/loader.js"></script>
