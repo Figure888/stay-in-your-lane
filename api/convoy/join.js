@@ -5,7 +5,7 @@ import { joinConvoy } from '../../lib/convoy.js';
 import { requireUser } from '../../lib/auth.js';
 import { limit } from '../../lib/ratelimit.js';
 
-const STAKES = [100, 500, 1000, 5000];
+const STAKES = [100, 250, 500];
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });

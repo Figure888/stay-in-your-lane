@@ -11,7 +11,7 @@ import { admin } from '../../lib/referrals.js';
 import { requireUser } from '../../lib/auth.js';
 import { limit } from '../../lib/ratelimit.js';
 
-const STAKES = [100, 500, 1000, 5000];
+const STAKES = [100, 250, 500];
 
 const MESSAGES = {
   insufficient_chips:   'Not enough chips for that stake.',

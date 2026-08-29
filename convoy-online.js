@@ -23,7 +23,7 @@
 
   var RANK = ['2','3','4','5','6','7','8','9','T','J','Q','K','A'];
   var SUIT = ['\u2660','\u2665','\u2666','\u2663'];
-  var STAKES = [100, 500, 1000, 5000];
+  var STAKES = [100, 250, 500];
   var POLL_MS = 2000;
 
   var mount = null, timer = null, state = null, gameId = null, busy = false;
