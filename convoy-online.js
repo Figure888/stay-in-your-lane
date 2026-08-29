@@ -103,6 +103,20 @@
           }).join('') +
         '</div>' +
         '<p class="msg" id="coMsg" style="margin-top:10px">' + (note || '') + '</p>' +
+        '<div style="border-top:1px solid var(--edge);margin-top:14px;padding-top:12px">' +
+          '<p class="muted" style="font-size:12.5px;margin:0 0 8px">' +
+            'Or open a private table and send the link to someone.</p>' +
+          '<div class="mode-row">' +
+            '<button class="mode-btn" id="coPrivate">Open a private table</button>' +
+          '</div>' +
+          '<div class="mode-row" style="margin-top:6px">' +
+            '<input id="coJoinCode" placeholder="Have a code?" maxlength="6" ' +
+              'style="flex:2;min-width:0;padding:10px;border-radius:4px;' +
+              'border:1px solid var(--edge);background:#0d1012;color:inherit;' +
+              'text-transform:uppercase;letter-spacing:.12em;text-align:center">' +
+            '<button class="mode-btn" id="coJoinCodeBtn" style="flex:1">Join</button>' +
+          '</div>' +
+        '</div>' +
       '</div>';
 
     Array.prototype.forEach.call(
@@ -111,6 +125,112 @@
         b.addEventListener('click', function () { join(Number(b.dataset.stake)); });
       }
     );
+
+    document.getElementById('coPrivate').addEventListener('click', function () {
+      createInvite(pendingStake || STAKES[0]);
+    });
+
+    document.getElementById('coJoinCodeBtn').addEventListener('click', function () {
+      var v = document.getElementById('coJoinCode').value.trim();
+      if (v) redeemInvite(v);
+    });
+  }
+
+  var pendingStake = null;
+
+  // -------------------------------------------------------- private tables
+
+  async function createInvite(stake) {
+    msg('Opening a table\u2026');
+    try {
+      var r = await api('/api/convoy/invite', { method: 'POST', body: { stake: stake } });
+      renderInvite(r);
+      watchInvite(r.code);
+    } catch (e) {
+      msg(friendly(e.message), 'bad');
+    }
+  }
+
+  function renderInvite(inv) {
+    el().innerHTML =
+      '<div class="cv-block">' +
+        '<div class="cv-head"><b>Your table is open</b>' +
+          '<span class="muted">' + inv.stake.toLocaleString() + '</span></div>' +
+        '<p class="muted" style="font-size:12.5px;margin:8px 0">' +
+          'Send this to whoever you want to play. The game starts the moment ' +
+          'they join. Expires in 24 hours.</p>' +
+        '<div class="cv-invite-code" style="font-family:ui-monospace,Menlo,monospace;' +
+          'font-size:1.8rem;letter-spacing:.2em;text-align:center;padding:14px;' +
+          'border-radius:6px;background:rgba(0,0,0,.3);margin-bottom:10px;' +
+          'user-select:all">' + esc(inv.code) + '</div>' +
+        '<div class="mode-row">' +
+          '<button class="mode-btn" id="coShare">Share the link</button>' +
+          '<button class="mode-btn" id="coBack">Back</button>' +
+        '</div>' +
+        '<p class="msg" id="coMsg" style="margin-top:10px">Waiting for them to join\u2026</p>' +
+      '</div>';
+
+    document.getElementById('coShare').addEventListener('click', function () {
+      shareLink(inv);
+    });
+    document.getElementById('coBack').addEventListener('click', function () {
+      stopPolling();
+      renderLobby();
+    });
+  }
+
+  async function shareLink(inv) {
+    var text = 'Come play a hand of Convoy with me \u2014 heads-up, ' +
+               inv.stake.toLocaleString() + ' chips: ' + inv.link;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Stay in Your Lane', text: text, url: inv.link });
+        return;
+      } catch (e) { /* dismissed */ }
+    }
+
+    try {
+      await navigator.clipboard.writeText(inv.link);
+      msg('Link copied.');
+    } catch (e) {
+      msg('Copy failed \u2014 long-press the code.', 'bad');
+    }
+  }
+
+  function watchInvite(code) {
+    stopPolling();
+    timer = setInterval(async function () {
+      try {
+        var r = await api('/api/convoy/invite?code=' + encodeURIComponent(code));
+        if (r.gameId) {
+          gameId = r.gameId;
+          startPolling();
+        } else if (r.expired) {
+          stopPolling();
+          renderLobby('That invite expired.');
+        }
+      } catch (e) { /* keep waiting */ }
+    }, POLL_MS);
+  }
+
+  async function redeemInvite(code) {
+    msg('Joining\u2026');
+    try {
+      var r = await api('/api/convoy/invite', { method: 'POST', body: { code: code } });
+      if (r.gameId) {
+        gameId = r.gameId;
+        startPolling();
+      }
+    } catch (e) {
+      msg(friendly(e.message), 'bad');
+    }
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
   }
 
   async function join(stake) {
@@ -136,6 +256,12 @@
       no_profile: 'Your account isn\u2019t set up yet. Try signing out and back in.',
       not_signed_in: 'Sign in to play online.',
       bad_stake: 'That stake isn\u2019t available.',
+      already_in_game: 'You\u2019re already at a table.',
+      cannot_join_own_table: 'That\u2019s your own invite.',
+      invite_already_used: 'Someone else took that seat.',
+      invite_expired: 'That invite has expired.',
+      unknown_code: 'No table with that code.',
+      host_short_on_chips: 'The host is short on chips.',
     })[code] || code;
   }
 
@@ -357,6 +483,28 @@
         var s = await window.sb.auth.getSession();
         _myId = s.data.session ? s.data.session.user.id : null;
       } catch (e) { _myId = null; }
+
+      // Arrived from an invite link? Take the seat before anything else.
+      var invited = null;
+      try {
+        invited = new URLSearchParams(location.search).get('table');
+      } catch (e) {}
+
+      if (invited) {
+        try {
+          var inv = await api('/api/convoy/invite', {
+            method: 'POST', body: { code: invited },
+          });
+          if (inv.gameId) {
+            gameId = inv.gameId;
+            startPolling();
+            return;
+          }
+        } catch (e) {
+          renderLobby(friendly(e.message));
+          return;
+        }
+      }
 
       // Already at a table? Drop straight back in.
       try {
