@@ -213,8 +213,8 @@
       var c = document.getElementById('sbCountry').value.trim().toUpperCase();
       var r = document.getElementById('sbRegion').value.trim();
       try {
-        var res = await api('/api/social/leaderboard', {
-          method: 'POST', body: { country: c || null, region: r || null },
+        var res = await api('/api/social', {
+          method: 'POST', body: { do: 'location', country: c || null, region: r || null },
         });
         if (res.ok) {
           account.country = c; account.region = r;

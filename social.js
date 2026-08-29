@@ -175,7 +175,7 @@
   async function poll() {
     if (!chatGame) return;
     try {
-      var r = await api('/api/social/chat?gameId=' + chatGame + '&after=' + lastId);
+      var r = await api('/api/social?do=chat&gameId=' + chatGame + '&after=' + lastId);
       if (!r.ok || !r.messages || !r.messages.length) return;
 
       var log = $('soLog');
@@ -200,7 +200,7 @@
     if (!input || !input.value.trim() || !chatGame) return;
     var body = input.value.trim();
     input.value = '';
-    try { await api('/api/social/chat', { method: 'POST', body: { gameId: chatGame, body: body } }); poll(); }
+    try { await api('/api/social', { method: 'POST', body: { do: 'say', gameId: chatGame, body: body } }); poll(); }
     catch (e) { input.value = body; }
   }
 
@@ -208,7 +208,7 @@
     if (!chatGame) return;
     $('soGifts').classList.remove('on');
     try {
-      await api('/api/social/chat', { method: 'POST', body: { gameId: chatGame, gift: id } });
+      await api('/api/social', { method: 'POST', body: { do: 'gift', gameId: chatGame, gift: id } });
       if (window.Chips && window.Chips.syncBalance) window.Chips.syncBalance();
       poll();
     } catch (e) {
@@ -232,7 +232,7 @@
     host.innerHTML = '<p class="muted" style="font-size:12.5px">Loading\u2026</p>';
 
     var d;
-    try { d = await api('/api/social/leaderboard?scope=' + scope); }
+    try { d = await api('/api/social?do=leaderboard&scope=' + scope); }
     catch (e) {
       host.innerHTML = '<p class="muted" style="font-size:12.5px">Could not load rankings.</p>';
       return;
