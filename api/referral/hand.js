@@ -7,12 +7,15 @@
 
 import { recordHand } from '../../lib/referrals.js';
 import { requireUser } from '../../lib/auth.js';
+import { limit } from '../../lib/ratelimit.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
   const userId = await requireUser(req);
   if (!userId) return res.status(401).json({ error: 'not_signed_in' });
+
+  if (!(await limit(res, userId, 'ref:hand', 60, 60))) return;
 
   try {
     const result = await recordHand(userId);

@@ -9,6 +9,7 @@
 
 import { admin } from '../../lib/referrals.js';
 import { requireUser } from '../../lib/auth.js';
+import { limit } from '../../lib/ratelimit.js';
 
 const STAKES = [100, 500, 1000, 5000];
 
@@ -25,6 +26,8 @@ const MESSAGES = {
 export default async function handler(req, res) {
   const userId = await requireUser(req);
   if (!userId) return res.status(401).json({ error: 'not_signed_in' });
+
+  if (!(await limit(res, userId, 'convoy:invite', 10, 60))) return;
 
   try {
     if (req.method === 'GET') {

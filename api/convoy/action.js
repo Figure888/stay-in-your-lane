@@ -11,6 +11,7 @@
 import { convoyDraw, convoyPlace, convoySwap, convoyBet, convoyState }
   from '../../lib/convoy.js';
 import { requireUser } from '../../lib/auth.js';
+import { limit } from '../../lib/ratelimit.js';
 
 const BETS = ['check', 'call', 'raise', 'fold'];
 
@@ -19,6 +20,8 @@ export default async function handler(req, res) {
 
   const userId = await requireUser(req);
   if (!userId) return res.status(401).json({ error: 'not_signed_in' });
+
+  if (!(await limit(res, userId, 'convoy:action', 60, 60))) return;
 
   const { gameId, action, lane, slot, bet } = req.body || {};
   if (!Number.isInteger(gameId)) return res.status(400).json({ error: 'bad_game_id' });

@@ -3,6 +3,7 @@
 
 import { joinConvoy } from '../../lib/convoy.js';
 import { requireUser } from '../../lib/auth.js';
+import { limit } from '../../lib/ratelimit.js';
 
 const STAKES = [100, 500, 1000, 5000];
 
@@ -11,6 +12,8 @@ export default async function handler(req, res) {
 
   const userId = await requireUser(req);
   if (!userId) return res.status(401).json({ error: 'not_signed_in' });
+
+  if (!(await limit(res, userId, 'convoy:join', 20, 60))) return;
 
   const stake = Number(req.body?.stake);
 

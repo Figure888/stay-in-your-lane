@@ -3,6 +3,7 @@
 
 import { applyCode } from '../../lib/referrals.js';
 import { requireUser } from '../../lib/auth.js';
+import { limit } from '../../lib/ratelimit.js';
 
 const MESSAGES = {
   invalid_code:     "That code doesn't look right. Check for typos.",
@@ -16,6 +17,8 @@ export default async function handler(req, res) {
 
   const userId = await requireUser(req);
   if (!userId) return res.status(401).json({ error: 'not_signed_in' });
+
+  if (!(await limit(res, userId, 'ref:apply', 10, 60))) return;
 
   const { code, deviceId } = req.body || {};
 
