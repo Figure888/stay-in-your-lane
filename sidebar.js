@@ -360,7 +360,8 @@
   function wireSettings() {
     document.getElementById('sbSound').addEventListener('click', function (e) {
       var off = localStorage.getItem('siyl.sound') === 'off';
-      localStorage.setItem('siyl.sound', off ? 'on' : 'off');
+      if (window.SFX) window.SFX.set(off);      // plays a blip when switching on
+      else localStorage.setItem('siyl.sound', off ? 'on' : 'off');
       e.target.textContent = off ? 'On' : 'Off';
     });
 

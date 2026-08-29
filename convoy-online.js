@@ -137,7 +137,23 @@
     return cv;
   }
 
+  var lastTurn = null, lastPhase = null;
+
   function paint(s) {
+    // Only sound the transitions — paint() runs on every poll.
+    if (window.SFX) {
+      if (s.yourTurn && lastTurn === false) window.SFX.play('turn');
+      if (s.phase === 'done' && lastPhase !== 'done') {
+        var won = s.winner && s.youAre &&
+          ((s.youAre === 'a' && (s.result || {}).winsA > (s.result || {}).winsB) ||
+           (s.youAre === 'b' && (s.result || {}).winsB > (s.result || {}).winsA));
+        window.SFX.play(won ? 'win' : 'lose');
+      }
+      if (lastPhase === null && s.phase !== 'done') window.SFX.play('shuffle');
+    }
+    lastTurn = !!s.yourTurn;
+    lastPhase = s.phase;
+
     state = s;
     deadline = s.deadline;
 
@@ -184,6 +200,15 @@
   async function send(payload) {
     if (busy || !gameId) return;
     busy = true;
+
+    if (window.SFX) {
+      window.SFX.play(payload.action === 'draw'  ? 'deal'
+                    : payload.action === 'place' ? 'flip'
+                    : payload.action === 'swap'  ? 'flip'
+                    : payload.bet === 'fold'     ? 'fold'
+                    : payload.bet === 'raise'    ? 'raise'
+                    : 'check');
+    }
     try {
       payload.do = payload.action; delete payload.action; payload.gameId = gameId;
       var r = await api('/api/table', { method: 'POST', body: payload });
@@ -328,7 +353,7 @@
   async function createInvite(stake) {
     note('Opening a table\u2026');
     try {
-      var inv = await api('/api/table', { method: 'POST', body: { do: 'invite', stake: stake } });
+      var inv = await api('/api/convoy/invite', { method: 'POST', body: { stake: stake } });
       showLobby('');
       $('coMsg').innerHTML = 'Code <b style="letter-spacing:.2em">' + esc(inv.code) +
         '</b> \u2014 <a href="#" id="coShare" style="color:var(--paint)">share the link</a>';
@@ -346,7 +371,7 @@
     stopPolling();
     timer = setInterval(async function () {
       try {
-        var r = await api('/api/table?game=convoy&do=invite&code=' + encodeURIComponent(code));
+        var r = await api('/api/convoy/invite?code=' + encodeURIComponent(code));
         if (r.gameId) { gameId = r.gameId; startPolling(); }
         else if (r.expired) { stopPolling(); showLobby('That invite expired.'); }
       } catch (e) {}
@@ -356,7 +381,7 @@
   async function redeem(code) {
     note('Joining\u2026');
     try {
-      var r = await api('/api/table', { method: 'POST', body: { do: 'redeem', code: code } });
+      var r = await api('/api/convoy/invite', { method: 'POST', body: { code: code } });
       if (r.gameId) { gameId = r.gameId; startPolling(); }
     } catch (e) { note(friendly(e.message)); }
   }
@@ -376,7 +401,7 @@
 
       if (invited) {
         try {
-          var inv = await api('/api/table', { method: 'POST', body: { do: 'redeem', code: invited } });
+          var inv = await api('/api/convoy/invite', { method: 'POST', body: { code: invited } });
           if (inv.gameId) { gameId = inv.gameId; startPolling(); return; }
         } catch (e) { showLobby(friendly(e.message)); return; }
       }

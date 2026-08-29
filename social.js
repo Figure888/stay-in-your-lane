@@ -209,6 +209,7 @@
     $('soGifts').classList.remove('on');
     try {
       await api('/api/social', { method: 'POST', body: { do: 'gift', gameId: chatGame, gift: id } });
+      if (window.SFX) window.SFX.play('gift');
       if (window.Chips && window.Chips.syncBalance) window.Chips.syncBalance();
       poll();
     } catch (e) {
