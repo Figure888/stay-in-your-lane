@@ -13,6 +13,7 @@ const SHELL = [
   './age-gate.js',
   './chips-billing.js',
   './chip-store.js',
+  './avatars.js',
   './sound.js',
   './sound.js',
   './sound.js',

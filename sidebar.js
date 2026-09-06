@@ -45,17 +45,9 @@
   }
 
   function avatarHTML(val, size) {
-    size = size || 40;
-    if (val && val.indexOf('preset:') === 0) {
-      return presetSVG(Number(val.slice(7)) || 0, size);
-    }
-    if (val && window.SB_URL) {
-      var url = window.SB_URL + '/storage/v1/object/public/avatars/' +
-                val + '?v=' + Date.now();
-      return '<img src="' + esc(url) + '" width="' + size + '" height="' + size +
-             '" style="border-radius:9px;object-fit:cover" alt="">';
-    }
-    return presetSVG(0, size);
+    return window.Avatars
+      ? window.Avatars.html(val, size || 40, account && account.displayName)
+      : '';
   }
 
   // ------------------------------------------------------------------ setup
@@ -243,10 +235,10 @@
       '<div class="sb-field">' +
         '<label>Avatar</label>' +
         '<div class="sb-grid" id="sbAvatars">' +
-          PRESET_COLORS.map(function (_, i) {
-            var v = 'preset:' + i;
+          (window.Avatars ? window.Avatars.ids : []).map(function (v, i) {
             return '<button data-avatar="' + v + '"' +
-                   (sel === v ? ' class="on"' : '') + '>' + presetSVG(i, 46) + '</button>';
+                   (sel === v ? ' class="on"' : '') + '>' +
+                   window.Avatars.html(v, 46) + '</button>';
           }).join('') +
         '</div>' +
         '<button class="sb-btn ghost" id="sbUpload">Upload a picture</button>' +

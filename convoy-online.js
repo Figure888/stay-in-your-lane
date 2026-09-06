@@ -93,8 +93,10 @@
 
     var cv = {
       P: [
-        { name: 'You', lanes: mine, held: myHeld, disc: !s.canSwap },
-        { name: s.oppName || 'Opponent', lanes: theirs, held: oppHeld, disc: false },
+        { name: 'You', lanes: mine, held: myHeld, disc: !s.canSwap,
+          avatar: s.youAvatar || null },
+        { name: s.oppName || 'Opponent', lanes: theirs, held: oppHeld, disc: false,
+          avatar: s.oppAvatar || null },
       ],
       bank: 0,                      // filled from the account balance
       pot: s.pot || 0,
@@ -353,7 +355,7 @@
   async function createInvite(stake) {
     note('Opening a table\u2026');
     try {
-      var inv = await api('/api/table', { method: 'POST', body: { do: 'invite', stake: stake } });
+      var inv = await api('/api/convoy/invite', { method: 'POST', body: { stake: stake } });
       showLobby('');
       $('coMsg').innerHTML = 'Code <b style="letter-spacing:.2em">' + esc(inv.code) +
         '</b> \u2014 <a href="#" id="coShare" style="color:var(--paint)">share the link</a>';
@@ -371,7 +373,7 @@
     stopPolling();
     timer = setInterval(async function () {
       try {
-        var r = await api('/api/table?game=convoy&do=invite&code=' + encodeURIComponent(code));
+        var r = await api('/api/convoy/invite?code=' + encodeURIComponent(code));
         if (r.gameId) { gameId = r.gameId; startPolling(); }
         else if (r.expired) { stopPolling(); showLobby('That invite expired.'); }
       } catch (e) {}
@@ -381,7 +383,7 @@
   async function redeem(code) {
     note('Joining\u2026');
     try {
-      var r = await api('/api/table', { method: 'POST', body: { do: 'redeem', code: code } });
+      var r = await api('/api/convoy/invite', { method: 'POST', body: { code: code } });
       if (r.gameId) { gameId = r.gameId; startPolling(); }
     } catch (e) { note(friendly(e.message)); }
   }
@@ -401,7 +403,7 @@
 
       if (invited) {
         try {
-          var inv = await api('/api/table', { method: 'POST', body: { do: 'redeem', code: invited } });
+          var inv = await api('/api/convoy/invite', { method: 'POST', body: { code: invited } });
           if (inv.gameId) { gameId = inv.gameId; startPolling(); return; }
         } catch (e) { showLobby(friendly(e.message)); return; }
       }
